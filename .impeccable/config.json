@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "static/index.html"
+        ],
+        "createdAt": "2026-11-17T12:12:16.583Z",
+        "reason": "Claude decided: the dots are the loading indicator shown only while a /query request is in flight and are replaced when it settles; animation is off under prefers-reduced-motion"
+      }
+    ]
+  }
+}

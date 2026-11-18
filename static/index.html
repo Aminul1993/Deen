@@ -1,0 +1,1401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fffdf9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1f23" media="(prefers-color-scheme: dark)">
+<title>Deen · Quran &amp; Hadith Q&amp;A</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232d5b60'/%3E%3Cpath d='M16 10.5c-2.2-1.6-5-2.2-8-2v13c3-.2 5.8.4 8 2 2.2-1.6 5-2.2 8-2v-13c-3-.2-5.8.4-8 2zm0 0v13' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preload" href="/static/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  /* Source Serif 4 (SIL Open Font License, see /static/fonts/OFL.txt), weights 400–700. */
+  @font-face {
+    font-family: "Source Serif 4";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/source-serif-4-latin.woff2) format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "Source Serif 4";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/source-serif-4-latin-ext.woff2) format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "Source Serif 4";
+    font-style: italic;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/source-serif-4-latin-italic.woff2) format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "Source Serif 4";
+    font-style: italic;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/source-serif-4-latin-ext-italic.woff2) format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  /* Arabic and Bengali (SIL Open Font License, see /static/fonts/OFL-*.txt). Each downloads only when a
+     page actually shows that script. Naskh is scaled up so Arabic matches the Latin text's visual size. */
+  @font-face {
+    font-family: "Noto Naskh Arabic";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    size-adjust: 112%;
+    src: url(/static/fonts/noto-naskh-arabic.woff2) format("woff2");
+    unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+  }
+  @font-face {
+    font-family: "Noto Serif Bengali";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/noto-serif-bengali.woff2) format("woff2");
+    unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0, U+1CD2, U+1CD5-1CD6, U+1CD8, U+1CE1, U+1CEA, U+1CED, U+1CF2, U+1CF5-1CF7, U+200C-200D, U+20B9, U+25CC, U+A8F1;
+  }
+
+  :root {
+    --bg: #f5f2ec;
+    --surface: #fffdf9;
+    --ink: #22252a;
+    --muted: #686c73;
+    --border: #e3ddd2;
+    --border-strong: #8e887d; /* form controls: 3:1 against bg and surface */
+    --accent: #2d5b60;
+    --accent-hover: #234a4e;
+    --on-accent: #ffffff;
+    --focus-ring: rgba(45, 91, 96, .18);
+    --selection: #cfe0df;
+    --user-bg: #2d5b60;
+    --user-ink: #f4f8f8;
+    --badge-bg: #e6eeee;
+    --badge-ink: #2d5b60;
+    --error-bg: #fbeceb;
+    --error-ink: #8a2c24;
+    --error-border: #efc9c5;
+    --shadow: 0 1px 2px rgba(40, 30, 10, .05), 0 4px 14px rgba(40, 30, 10, .04);
+    --sheet-shadow: 0 12px 40px rgba(20, 15, 5, .18);
+    --radius: 14px;
+    --measure: 720px;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: "Source Serif 4", "Noto Naskh Arabic", "Noto Serif Bengali", Georgia, "Times New Roman", serif;
+    accent-color: var(--accent);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141619;
+      --surface: #1c1f23;
+      --ink: #e7e5e1;
+      --muted: #9a9fa6;
+      --border: #2c3036;
+      --border-strong: #666d77;
+      --accent: #7fb3b3;
+      --accent-hover: #96c4c4;
+      --on-accent: #0f1f1f;
+      --focus-ring: rgba(127, 179, 179, .22);
+      --selection: #2f5154;
+      --user-bg: #284549;
+      --user-ink: #eef5f5;
+      --badge-bg: #213739;
+      --badge-ink: #a9d0cf;
+      --error-bg: #3a1f1d;
+      --error-ink: #f2b8b1;
+      --error-border: #5c302b;
+      --shadow: none;
+      --sheet-shadow: 0 16px 48px rgba(0, 0, 0, .55);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button, select, textarea { font: inherit; color: inherit; }
+  button { touch-action: manipulation; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::selection { background: var(--selection); color: var(--ink); }
+  h1, h2, h3 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin-right: auto; }
+  .brand h1 { margin: 0; font: 600 22px/1.2 var(--serif); }
+  .brand span { color: var(--muted); font-size: 13px; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .field { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .field select {
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 6px 8px;
+    max-width: 220px;
+    cursor: pointer;
+  }
+  .ghost {
+    font-size: 13px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--ink);
+    cursor: pointer;
+    transition: background-color .15s ease-out;
+  }
+  .ghost:hover:not(:disabled) { background: var(--bg); }
+  .ghost:active:not(:disabled) { transform: translateY(1px); }
+  .ghost:disabled { color: var(--muted); border-color: var(--border); cursor: default; }
+
+  /* Conversation */
+  .chat {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-width: thin;
+  }
+  .thread {
+    max-width: var(--measure);
+    margin: 0 auto;
+    padding: 24px 16px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .thread:empty { display: none; }
+  .msg { display: flex; flex-direction: column; min-width: 0; scroll-margin-top: 16px; }
+  .msg.user { align-items: flex-end; }
+  .msg.user .bubble {
+    max-width: 85%;
+    padding: 10px 14px;
+    background: var(--user-bg);
+    color: var(--user-ink);
+    border-radius: var(--radius) var(--radius) 4px var(--radius);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .msg.user .bubble::selection { background: var(--user-ink); color: var(--user-bg); }
+  .msg.user .scope { font-size: 12px; color: var(--muted); margin: 5px 4px 0; }
+  .msg.bot .label { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 4px 6px; }
+  .msg.bot .bubble {
+    padding: 18px 22px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px var(--radius) var(--radius) var(--radius);
+    box-shadow: var(--shadow);
+    overflow-wrap: break-word;
+  }
+  .msg.bot .bubble.error { background: var(--error-bg); border-color: var(--error-border); color: var(--error-ink); box-shadow: none; }
+  .error-text { margin: 0; }
+  .retry {
+    margin-top: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    color: var(--error-ink);
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .retry:hover { background: var(--surface); }
+  .retry:active { transform: translateY(1px); }
+  .searched { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+  .searched q { font-style: italic; }
+
+  .answer { font: 17px/1.65 var(--serif); }
+  .answer p, .answer ul, .answer ol { margin: 0 0 .85em; }
+  .answer ul, .answer ol { padding-inline-start: 1.4em; }
+  /* Arabic diacritics and Bengali vowel signs need more room between lines. */
+  [lang="ar"].answer, [lang="ar"].excerpt { line-height: 1.95; }
+  [lang="bn"].answer, [lang="bn"].excerpt { line-height: 1.8; }
+  .answer li + li { margin-top: .3em; }
+  .answer li::marker { color: var(--muted); }
+  .answer strong { font-weight: 650; }
+  .answer h3 { font: 600 16px/1.4 var(--sans); margin: 1.3em 0 .4em; }
+  .answer > :first-child { margin-top: 0; }
+  .answer > :last-child { margin-bottom: 0; }
+
+  .sources { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .sources summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px 2px 0;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    list-style: none;
+    border-radius: 6px;
+  }
+  .sources summary::-webkit-details-marker { display: none; }
+  .sources summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .chev { flex: none; transition: transform .2s cubic-bezier(.16, 1, .3, 1); }
+  .sources[open] .chev { transform: rotate(90deg); }
+  .sources ol { margin: 12px 0 0; padding-left: 1.6em; display: flex; flex-direction: column; gap: 14px; }
+  .sources li::marker { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .source-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 14px; }
+  .source-ref { font-weight: 600; }
+  .badge { background: var(--badge-bg); color: var(--badge-ink); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
+  .score { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .excerpt { margin: 4px 0 0; color: var(--muted); font: 15px/1.6 var(--serif); }
+
+  .typing { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+  .dots { display: inline-flex; gap: 4px; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: .35; animation: pulse 1.2s infinite ease-in-out; }
+  .dots i:nth-child(2) { animation-delay: .15s; }
+  .dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes pulse { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+  /* Empty state */
+  .empty { max-width: 580px; margin: 9vh auto 0; padding: 0 24px 32px; text-align: center; }
+  .empty h2 { margin: 0 0 12px; font: 600 30px/1.2 var(--serif); }
+  .empty p { margin: 0 auto 24px; max-width: 52ch; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .chip {
+    font-size: 14px;
+    text-align: left;
+    padding: 8px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: border-color .15s ease-out, color .15s ease-out;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip:active { transform: translateY(1px); }
+
+  /* Composer */
+  .composer-wrap {
+    padding: 12px 16px calc(10px + env(safe-area-inset-bottom));
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+  .composer {
+    max-width: calc(var(--measure) - 32px);
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 7px 7px 7px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    transition: border-color .15s ease-out, box-shadow .15s ease-out;
+  }
+  .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+  .composer textarea {
+    flex: 1;
+    min-height: 40px;
+    max-height: 200px;
+    padding: 9px 0;
+    resize: none;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: 16px; /* 16px stops iOS zooming the page on focus */
+    line-height: 1.4;
+    caret-color: var(--accent);
+    scrollbar-width: thin;
+  }
+  .composer textarea::placeholder { color: var(--muted); opacity: 1; }
+  .send {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 11px;
+    background: var(--accent);
+    color: var(--on-accent);
+    cursor: pointer;
+    transition: background-color .15s ease-out, opacity .15s ease-out;
+  }
+  .send:hover:not(:disabled) { background: var(--accent-hover); }
+  .send:active:not(:disabled) { transform: scale(.94); }
+  .send:disabled { opacity: .35; cursor: default; }
+  .hint {
+    max-width: calc(var(--measure) - 32px);
+    margin: 7px auto 0;
+    padding: 0 4px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .count { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* Dialogs (.sheet): the readers and the azan times. Readers (Duas, Namaz Shikkha) read a text one passage at a time. */
+  .top-actions { display: flex; gap: 8px; }
+  .sheet {
+    width: min(620px, calc(100vw - 32px));
+    max-width: none;
+    max-height: min(780px, calc(100dvh - 48px));
+    padding: 0;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--sheet-shadow);
+    overscroll-behavior: contain;
+  }
+  .sheet[open] { display: flex; flex-direction: column; }
+  .sheet::backdrop { background: rgba(20, 22, 25, .45); }
+  @media (prefers-color-scheme: dark) { .sheet::backdrop { background: rgba(0, 0, 0, .6); } }
+  .sheet-head { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 22px; border-bottom: 1px solid var(--border); }
+  .sheet-head h2 { flex: none; margin: 0; font: 600 20px/1.2 var(--serif); }
+  .sheet-head .icon-btn { margin-left: auto; }
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background-color .15s ease-out, color .15s ease-out;
+  }
+  .icon-btn:hover { background: var(--bg); color: var(--ink); }
+  .sheet-body { flex: 1; min-height: 240px; overflow-y: auto; padding: 24px 22px 28px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+  .sheet-context { min-width: 0; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sheet-context:empty { display: none; }
+  .item-title { margin: 0 0 16px; font: 600 15px/1.4 var(--sans); color: var(--accent); }
+  .item-arabic, .item-translit, .item-text { white-space: pre-line; overflow-wrap: break-word; }
+  .item-arabic { margin: 0 0 16px; font: 26px/2.05 var(--serif); }
+  .item-translit { margin: 0 0 14px; font: italic 16px/1.6 var(--serif); color: var(--muted); }
+  .item-text { margin: 0; font: 17px/1.65 var(--serif); }
+  [lang="ar"].item-text { line-height: 1.95; }
+  [lang="bn"].item-text, [lang="bn"].item-translit { line-height: 1.8; }
+  .item-source { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .item-ref { margin: 0; font-size: 14px; font-weight: 600; }
+  .item-details { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .reader-note { margin: 0; color: var(--muted); }
+  .reader-error { padding: 12px 14px; color: var(--error-ink); background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 10px; }
+  .reader-error .retry { margin-top: 10px; }
+  .reader-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+  }
+  .reader-nav .ghost { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; padding: 7px 12px; }
+  .reader-jump { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .reader-jump input {
+    width: 4.5em;
+    padding: 5px 4px;
+    font: inherit;
+    font-size: 14px;
+    text-align: center;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+  .reader-jump input::-webkit-inner-spin-button, .reader-jump input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* Azan times: a bar under the top bar, and a dialog */
+  .prayer-bar { padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .prayer-open {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 0;
+    font-size: 13px;
+    text-align: left;
+    color: var(--ink);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+  }
+  .prayer-open:focus-visible { outline-offset: -2px; border-radius: 6px; }
+  .prayer-open:hover .pb-text { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
+  .prayer-open svg { flex: none; color: var(--accent); }
+  .pb-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+  .pb-cta { color: var(--accent); font-weight: 600; }
+  .pb-place { color: var(--muted); }
+  .pb-next strong { font-weight: 650; font-variant-numeric: tabular-nums; }
+  .pb-in { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .prayer-open .chev { margin-left: auto; color: var(--muted); }
+
+  .prayer-place { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
+  .pt-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; font-size: 13px; font-weight: 600; }
+  .pt-field select, .pt-settings select {
+    width: 100%;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 400;
+    padding: 7px 8px;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .prayer-place .ghost { padding: 7px 12px; font-size: 14px; }
+  .pt-status { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+  .pt-status:empty { display: none; }
+  .pt-status.error { color: var(--error-ink); }
+  .pt-date { margin: 22px 0 10px; font-size: 13px; color: var(--muted); }
+  .pt-times { margin: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .pt-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; }
+  .pt-row + .pt-row { border-top: 1px solid var(--border); }
+  .pt-row dt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-weight: 600; }
+  .pt-row dd { margin: 0; font: 600 17px/1.3 var(--serif); font-variant-numeric: tabular-nums; }
+  .pt-row.sunrise dt, .pt-row.sunrise dd { color: var(--muted); font-weight: 400; }
+  .pt-row.next { background: var(--badge-bg); }
+  .pt-row.next dt, .pt-row.next dd { color: var(--badge-ink); }
+  .pt-tag { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .pt-tag.next-tag { color: var(--badge-ink); }
+  .pt-next { margin: 10px 0 0; font-size: 13.5px; color: var(--accent); font-weight: 600; }
+  .pt-next:empty { display: none; }
+  .pt-settings { margin-top: 18px; font-size: 13.5px; }
+  .pt-settings summary { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 600; list-style: none; cursor: pointer; border-radius: 4px; }
+  .pt-settings summary::-webkit-details-marker { display: none; }
+  .pt-settings[open] .chev { transform: rotate(90deg); }
+  .pt-settings summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .pt-settings label { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; font-weight: 600; font-size: 13px; }
+  .pt-note { margin: 18px 0 0; font-size: 12.5px; color: var(--muted); }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+
+  @media (max-width: 960px) {
+    .topbar { display: grid; grid-template-columns: 1fr auto; }
+    .controls { grid-column: 1 / -1; grid-row: 2; }
+  }
+  @media (max-width: 600px) {
+    .topbar { padding: 10px 16px; }
+    .brand span { display: none; }
+    .controls { grid-column: 1 / -1; grid-row: 2; flex-wrap: nowrap; gap: 12px; }
+    .field select { font-size: 16px; padding: 6px 6px; }
+    .field:first-child { flex: 1; min-width: 0; }
+    .field:first-child select { flex: 1; min-width: 0; max-width: none; }
+    .ghost { padding: 8px 12px; }
+    .thread { padding: 20px 12px 28px; }
+    .msg.user .bubble { max-width: 92%; }
+    .msg.bot .bubble { padding: 14px 16px; }
+    .answer { font-size: 16.5px; }
+    .empty { margin-top: 5vh; padding: 0 16px 24px; }
+    .empty h2 { font-size: 26px; }
+    .composer-wrap { padding: 10px 12px calc(8px + env(safe-area-inset-bottom)); }
+    .send { width: 44px; height: 44px; border-radius: 12px; }
+    .hint { justify-content: center; text-align: center; }
+    .prayer-bar { padding: 0 16px; }
+    .pt-field select, .pt-settings select { font-size: 16px; }
+    .sheet { width: 100vw; height: 100dvh; max-height: none; margin: 0; border: 0; border-radius: 0; }
+    .sheet-head { padding: 10px 8px 10px 16px; }
+    .sheet-body { padding: 20px 16px 24px; }
+    .item-arabic { font-size: 24px; }
+    .reader-nav { padding-left: 12px; padding-right: 12px; }
+    .reader-jump input { font-size: 16px; }
+  }
+  @media (max-width: 600px), (pointer: coarse) {
+    .keys { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dots i { animation: none; opacity: .7; }
+    .chev, .composer, .send, .chip, .ghost, .icon-btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Deen</h1>
+      <span>Quran &amp; Hadith Q&amp;A with citations</span>
+    </div>
+    <div class="controls">
+      <label class="field">Text
+        <select id="text">
+          <option value="">All texts</option>
+        </select>
+      </label>
+      <label class="field">Passages
+        <select id="topk">
+          <option>3</option>
+          <option selected>5</option>
+          <option>8</option>
+          <option>10</option>
+          <option>15</option>
+          <option>20</option>
+        </select>
+      </label>
+    </div>
+    <div class="top-actions">
+      <!-- A button for each reader with passages (Duas, Namaz Shikkha) is added here from GET /read. -->
+      <button type="button" class="ghost" id="clear" disabled>New chat</button>
+    </div>
+  </header>
+
+  <div class="prayer-bar">
+    <button type="button" class="prayer-open" id="prayer-open" aria-haspopup="dialog">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span class="pb-text" id="prayer-summary" aria-live="polite"></span>
+      <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+  <dialog class="sheet" id="reader" aria-labelledby="reader-heading">
+    <div class="sheet-head">
+      <h2 id="reader-heading"></h2>
+      <span class="sheet-context" id="reader-section"></span>
+      <button type="button" class="icon-btn" id="reader-close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body" id="reader-body" aria-live="polite"></div>
+    <div class="reader-nav">
+      <button type="button" class="ghost" id="reader-prev">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        Previous
+      </button>
+      <label class="reader-jump">
+        <input type="number" id="reader-position" min="1" inputmode="numeric" aria-label="Passage number">
+        <span>of <span id="reader-total">0</span></span>
+      </label>
+      <button type="button" class="ghost" id="reader-next">
+        Next
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+  </dialog>
+
+  <main class="chat" id="chat">
+    <section class="empty" id="empty">
+      <h2>Ask about the Quran and Hadith</h2>
+      <p>Answers follow the Hanafi school and come only from passages found in the Quran and Hadith, with every source cited: Surah and Ayah for the Quran, and collection, number and grade for each hadith. Ask in English, Arabic or Bengali, and follow up as you go.</p>
+      <div class="chips">
+        <button type="button" class="chip">What does the Quran say about patience in hardship?</button>
+        <button type="button" class="chip">What do the hadith say about the virtue of charity?</button>
+        <button type="button" class="chip" lang="bn">রোজার ফজিলত সম্পর্কে হাদিসে কী বলা হয়েছে?</button>
+        <button type="button" class="chip" lang="ar" dir="rtl">ماذا يقول القرآن عن بر الوالدين؟</button>
+      </div>
+    </section>
+    <div class="thread" id="thread" role="log" aria-live="polite" aria-label="Conversation"></div>
+  </main>
+
+  <footer class="composer-wrap">
+    <form class="composer" id="composer">
+      <label for="input" class="sr-only">Your question</label>
+      <textarea id="input" rows="1" maxlength="2000" dir="auto" placeholder="Ask about the Quran or Hadith…" autocomplete="off"></textarea>
+      <button type="submit" class="send" id="send" aria-label="Send question" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 19V5M5 12l7-7 7 7"/>
+        </svg>
+      </button>
+    </form>
+    <div class="hint">
+      <span><span class="keys">Enter to send · Shift+Enter for a new line · </span>Answers can be incomplete, so check the cited sources.</span>
+      <span class="count" id="count"></span>
+    </div>
+  </footer>
+
+<dialog class="sheet" id="prayer" aria-labelledby="prayer-heading">
+    <div class="sheet-head">
+      <h2 id="prayer-heading">Azan times</h2>
+      <button type="button" class="icon-btn" id="prayer-close" aria-label="Close azan times">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body">
+      <div class="prayer-place">
+        <label class="pt-field">Location
+          <select id="prayer-city">
+            <option value="">Choose a city…</option>
+          </select>
+        </label>
+        <button type="button" class="ghost" id="prayer-locate">Use my location</button>
+      </div>
+      <p class="pt-status" id="prayer-status" role="status"></p>
+      <div id="prayer-today" hidden>
+        <p class="pt-date" id="prayer-date"></p>
+        <dl class="pt-times" id="prayer-times"></dl>
+        <p class="pt-next" id="prayer-next"></p>
+      </div>
+      <details class="pt-settings">
+        <summary><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Calculation method</summary>
+        <label>Method
+          <select id="prayer-method"></select>
+        </label>
+        <label>Asr
+          <select id="prayer-asr">
+            <option value="hanafi">Hanafi: shadow twice its length</option>
+            <option value="standard">Shafi'i, Maliki, Hanbali: shadow its length</option>
+          </select>
+        </label>
+      </details>
+      <p class="pt-note">Times are calculated from the location and may differ by a few minutes from your local mosque's timetable. Your location stays in this browser.</p>
+    </div>
+  </dialog>
+
+<script src="/static/prayer-times.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  const MAX_CHARS = 2000;
+  const MAX_HISTORY = 8; // messages sent with each question; matches MAX_HISTORY_MESSAGES in main.py
+  const MAX_HISTORY_CHARS = 4000; // per message; the API accepts up to 10000
+  const history = []; // completed exchanges: {role: "user" | "assistant", content}
+  // Mouse/trackpad users: Enter sends and focus returns to the box. Touch users: Enter adds a line,
+  // and focus is never moved programmatically, so the keyboard doesn't pop up over a fresh answer.
+  const finePointer = window.matchMedia("(pointer: fine)").matches;
+  const $ = (id) => document.getElementById(id);
+  const chat = $("chat");
+  const thread = $("thread");
+  const empty = $("empty");
+  const form = $("composer");
+  const input = $("input");
+  const send = $("send");
+  const clear = $("clear");
+  const textSelect = $("text");
+  const topKSelect = $("topk");
+  const count = $("count");
+  let busy = false;
+
+  // ---------- helpers ----------
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function chevron() {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("class", "chev");
+    svg.setAttribute("width", "12");
+    svg.setAttribute("height", "12");
+    svg.setAttribute("viewBox", "0 0 12 12");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", "M4.5 2.5 8 6l-3.5 3.5");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "1.6");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.append(path);
+    return svg;
+  }
+
+  // Mirrors detect_language() in main.py: "bn" or "ar" when most letters are Bengali or Arabic script.
+  // Sets lang on messages so screen readers switch voice and Arabic/Bengali get their line spacing.
+  const NON_ARABIC_LETTERS = /[پچژگکیٹڈڑںےھۀ]/;
+  function scriptLang(text) {
+    const letters = text.match(/\p{L}/gu) || [];
+    if (!letters.length) return null;
+    const share = (re) => letters.filter((c) => re.test(c)).length / letters.length;
+    if (share(/[ঀ-৿]/) > 0.5) return "bn";
+    if (share(/[؀-ۿ]/) > 0.5 && !NON_ARABIC_LETTERS.test(text)) return "ar";
+    return null;
+  }
+
+  // Text in any language: direction follows the content (Arabic reads right to left), lang where known.
+  function textEl(tag, className, text) {
+    const node = el(tag, className, text);
+    node.dir = "auto";
+    const lang = scriptLang(text);
+    if (lang) node.lang = lang;
+    return node;
+  }
+
+  // Mirrors display_name() in main.py.
+  function prettyName(ns) {
+    if (!ns || ns === "__default__") return "Untitled text";
+    return ns.replace(/[_-]/g, " ").trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function inline(s) {
+    return escapeHtml(s)
+      // Isolate each bracketed citation, so "(Sahih al-Bukhari 52, graded Sahih)" keeps its brackets
+      // in the right place inside an Arabic sentence, and an Arabic citation inside an English one.
+      .replace(/\(([^()*]+)\)/g, "<bdi>($1)</bdi>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*\w])\*(?!\s)([^*]+?)\*(?!\w)/g, "$1<em>$2</em>");
+  }
+
+  // Small, safe Markdown subset: paragraphs, headings, bullet and numbered lists, bold, italics.
+  // All text is HTML-escaped before any tags are added.
+  function renderMarkdown(text) {
+    const out = [];
+    let para = [];
+    let list = null;
+    // dir="auto" on every block, so an Arabic paragraph reads right to left inside an English answer.
+    const flush = () => {
+      if (para.length) out.push('<p dir="auto">' + para.map(inline).join("<br>") + "</p>");
+      para = [];
+    };
+    const closeList = () => {
+      if (list) out.push("</" + list + ">");
+      list = null;
+    };
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim();
+      let m;
+      if (!line) {
+        flush();
+        closeList();
+      } else if ((m = line.match(/^#{1,6}\s+(.+)$/))) {
+        flush();
+        closeList();
+        out.push('<h3 dir="auto">' + inline(m[1]) + "</h3>");
+      } else if ((m = line.match(/^[-*•]\s+(.+)$/))) {
+        flush();
+        // Items take the list's direction: dir="auto" on items would hide their text from the list's own detection.
+        if (list !== "ul") { closeList(); out.push('<ul dir="auto">'); list = "ul"; }
+        out.push("<li>" + inline(m[1]) + "</li>");
+      } else if ((m = line.match(/^(\d+)[.)]\s+(.+)$/))) {
+        flush();
+        if (list !== "ol") { closeList(); out.push('<ol dir="auto" start="' + Number(m[1]) + '">'); list = "ol"; }
+        out.push("<li>" + inline(m[2]) + "</li>");
+      } else {
+        closeList();
+        para.push(line);
+      }
+    }
+    flush();
+    closeList();
+    return out.join("");
+  }
+
+  function focusInput() {
+    if (finePointer) input.focus();
+  }
+
+  function setBusy(value) {
+    busy = value;
+    updateComposer();
+  }
+
+  function updateComposer() {
+    const len = input.value.length;
+    send.disabled = busy || !input.value.trim();
+    clear.disabled = busy || !thread.hasChildNodes();
+    count.textContent = len > MAX_CHARS * 0.8 ? len + " / " + MAX_CHARS : "";
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 200) + "px";
+  }
+
+  // ---------- messages ----------
+
+  function addUserMessage(question, scopeLabel) {
+    empty.hidden = true;
+    const msg = el("div", "msg user");
+    msg.append(textEl("div", "bubble", question), el("div", "scope", scopeLabel));
+    thread.append(msg);
+    return msg;
+  }
+
+  function addBotMessage() {
+    const msg = el("div", "msg bot");
+    const bubble = el("div", "bubble");
+    msg.append(el("div", "label", "Deen"), bubble);
+    thread.append(msg);
+    return bubble;
+  }
+
+  function showPending(bubble) {
+    const typing = el("div", "typing");
+    const dots = el("span", "dots");
+    dots.setAttribute("aria-hidden", "true");
+    dots.append(el("i"), el("i"), el("i"));
+    typing.append(dots, el("span", null, "Searching the texts and writing an answer…"));
+    bubble.classList.remove("error");
+    bubble.setAttribute("aria-busy", "true");
+    bubble.replaceChildren(typing);
+  }
+
+  function renderSources(sources) {
+    const details = el("details", "sources");
+    const summary = el("summary");
+    summary.append(chevron(), sources.length + (sources.length === 1 ? " source" : " sources"));
+    details.append(summary);
+    const list = el("ol");
+    for (const s of sources) {
+      const item = el("li");
+      const head = el("div", "source-head");
+      head.append(el("span", "source-ref", s.reference || prettyName(s.namespace)));
+      if (s.namespace) head.append(el("span", "badge", prettyName(s.namespace)));
+      if (typeof s.score === "number") head.append(el("span", "score", "score " + s.score.toFixed(3)));
+      item.append(head);
+      if (s.excerpt) item.append(textEl("p", "excerpt", s.excerpt));
+      list.append(item);
+    }
+    details.append(list);
+    return details;
+  }
+
+  function showAnswer(bubble, data, question) {
+    bubble.removeAttribute("aria-busy");
+    bubble.replaceChildren();
+    // A follow-up is rewritten into a standalone question before searching; show it so the user can check it.
+    if (data.search_query && data.search_query !== question) {
+      const searched = el("p", "searched", "Searched for: ");
+      searched.append(textEl("q", null, data.search_query));
+      bubble.append(searched);
+    }
+    const answer = el("div", "answer");
+    const lang = scriptLang(data.answer || "");
+    if (lang) answer.lang = lang;
+    answer.innerHTML = renderMarkdown(data.answer || "");
+    bubble.append(answer);
+    if (Array.isArray(data.sources) && data.sources.length) bubble.append(renderSources(data.sources));
+  }
+
+  function showError(bubble, message, retry) {
+    bubble.removeAttribute("aria-busy");
+    bubble.classList.add("error");
+    bubble.replaceChildren(el("p", "error-text", message));
+    if (retry) {
+      const button = el("button", "retry", "Try again");
+      button.type = "button";
+      button.addEventListener("click", () => { if (!busy) retry(); });
+      bubble.append(button);
+    }
+  }
+
+  // FastAPI errors arrive as {detail: string | {message, ...} | [{msg, ...}]}.
+  async function readError(res) {
+    let detail;
+    try { detail = (await res.json()).detail; } catch (_) { /* not JSON */ }
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) return detail.map((d) => d.msg).filter(Boolean).join("; ") || "Invalid request.";
+    if (detail && detail.message) {
+      let msg = detail.message;
+      if (Array.isArray(detail.available_namespaces)) {
+        msg += " Available texts: " + detail.available_namespaces.map(prettyName).join(", ") + ".";
+      }
+      return msg;
+    }
+    return "The server returned an error (HTTP " + res.status + ").";
+  }
+
+  // ---------- API ----------
+
+  function ask(question) {
+    // Only the latest failed question can be retried: its history snapshot is still current.
+    thread.querySelectorAll(".retry").forEach((button) => button.remove());
+    const namespace = textSelect.value || null;
+    const topK = Number(topKSelect.value);
+    const payload = {
+      query: question,
+      namespace,
+      top_k: topK,
+      history: history.slice(-MAX_HISTORY).map((m) => ({ role: m.role, content: m.content.slice(0, MAX_HISTORY_CHARS) })),
+    };
+    const userMsg = addUserMessage(question, (namespace ? prettyName(namespace) : "All texts") + " · " + topK + " passages");
+    const bubble = addBotMessage();
+    request(payload, userMsg, bubble);
+  }
+
+  async function request(payload, userMsg, bubble) {
+    const retry = () => request(payload, userMsg, bubble);
+    setBusy(true);
+    showPending(bubble);
+    chat.scrollTop = chat.scrollHeight;
+    try {
+      let res;
+      try {
+        res = await fetch("/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch (_) {
+        showError(bubble, "Could not reach the server. Check that it is running, then try again.", retry);
+        return;
+      }
+      if (!res.ok) {
+        showError(bubble, await readError(res), res.status >= 500 ? retry : null);
+        return;
+      }
+      let data;
+      try {
+        data = await res.json();
+      } catch (_) {
+        showError(bubble, "The server's reply could not be read. Try again in a moment.", retry);
+        return;
+      }
+      showAnswer(bubble, data, payload.query);
+      // Only successful exchanges become context for follow-ups.
+      if (data.answer) history.push({ role: "user", content: payload.query }, { role: "assistant", content: data.answer });
+    } finally {
+      setBusy(false);
+      // Keep the question and the start of its answer in view, rather than jumping to the end of a long answer.
+      userMsg.scrollIntoView({ block: "start" });
+      focusInput();
+    }
+  }
+
+  async function loadTexts() {
+    try {
+      const res = await fetch("/texts");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      for (const t of data.texts || []) {
+        // The default namespace ("") can't be selected separately; it is still searched under "All texts".
+        if (!t.namespace || !t.vector_count) continue;
+        textSelect.add(new Option(prettyName(t.namespace), t.namespace));
+      }
+    } catch (err) {
+      console.warn("Could not load the list of texts:", err);
+      textSelect.title = "Could not load the list of texts; searching all texts.";
+    }
+  }
+
+  // ---------- readers (Duas, Namaz Shikkha) ----------
+  // Read a text one passage at a time (GET /read). A text gets a button only when it has passages.
+
+  const readerDialog = $("reader");
+  const readerBody = $("reader-body");
+  const readerInput = $("reader-position");
+  const readerPrev = $("reader-prev");
+  const readerNext = $("reader-next");
+  const readerCache = new Map(); // "text:position" -> item, for this page load
+  const lastPositions = {}; // text -> position last shown on this page load
+  const reader = { text: null, name: "", total: 0, position: null, request: 0 };
+
+  const positionKey = (text) => "deen-read-position:" + text;
+
+  function savedPosition(text) {
+    try { return Math.max(0, parseInt(localStorage.getItem(positionKey(text)), 10) || 0); } catch (_) { return 0; }
+  }
+
+  function savePosition(text, position) {
+    try { localStorage.setItem(positionKey(text), String(position)); } catch (_) { /* storage blocked */ }
+  }
+
+  async function getPage(text, position) {
+    const res = await fetch("/read/" + encodeURIComponent(text) + (position == null ? "" : "?position=" + position));
+    if (!res.ok) throw new Error(await readError(res));
+    const data = await res.json();
+    if (text === reader.text) reader.total = data.total;
+    if (data.item) readerCache.set(text + ":" + data.item.position, data.item);
+    return data;
+  }
+
+  async function fetchItem(text, position) {
+    return readerCache.get(text + ":" + position) || (await getPage(text, position)).item;
+  }
+
+  function fieldLabel(key) {
+    const words = key.replace(/[_-]+/g, " ").trim();
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+
+  function updateReaderNav() {
+    const { total, position } = reader;
+    $("reader-total").textContent = total.toLocaleString();
+    readerInput.max = String(total);
+    readerInput.value = total && position != null ? String(position + 1) : "";
+    readerInput.disabled = readerPrev.disabled = readerNext.disabled = total < 2;
+  }
+
+  function renderItem(item) {
+    const article = el("article", "item");
+    const section = $("reader-section");
+    section.textContent = item.section || "";
+    section.dir = "auto";
+    if (item.title) article.append(textEl("h3", "item-title", item.title));
+    if (item.arabic) article.append(textEl("p", "item-arabic", item.arabic));
+    if (item.transliteration) article.append(textEl("p", "item-translit", item.transliteration));
+    article.append(textEl("p", "item-text", item.text));
+    const details = Object.entries(item.details || {})
+      .map(([key, value]) => fieldLabel(key) + ": " + (Array.isArray(value) ? value.join(", ") : value));
+    if (item.reference || details.length) {
+      const source = el("div", "item-source");
+      if (item.reference) source.append(textEl("p", "item-ref", item.reference));
+      if (details.length) source.append(textEl("p", "item-details", details.join(" · ")));
+      article.append(source);
+    }
+    readerBody.replaceChildren(article);
+    readerBody.scrollTop = 0;
+  }
+
+  function showReaderNote(text) {
+    readerBody.replaceChildren(el("p", "reader-note", text));
+  }
+
+  function showReaderEmpty() {
+    reader.total = 0;
+    updateReaderNav();
+    showReaderNote("Nothing has been added to " + reader.name + " yet. Admins can add it by uploading files "
+      + "to the text named “" + reader.text + "”.");
+  }
+
+  function showReaderError(message, retry) {
+    const box = el("div", "reader-error");
+    const button = el("button", "retry", "Try again");
+    button.type = "button";
+    button.addEventListener("click", retry);
+    box.append(el("p", "error-text", message), button);
+    readerBody.replaceChildren(box);
+  }
+
+  async function showItem(position) {
+    const { text, total } = reader;
+    if (!total) return showReaderEmpty();
+    position = ((position % total) + total) % total; // wrap around both ends
+    reader.position = lastPositions[text] = position;
+    const request = ++reader.request;
+    updateReaderNav();
+    if (!readerCache.has(text + ":" + position)) showReaderNote("Loading…");
+    try {
+      const item = await fetchItem(text, position);
+      if (request !== reader.request) return; // the reader has already moved on
+      if (!item) return showReaderEmpty();
+      renderItem(item);
+      savePosition(text, position);
+      if (reader.total > 1) fetchItem(text, (position + 1) % reader.total).catch(() => {}); // so Next is instant
+    } catch (err) {
+      if (request === reader.request) showReaderError(err.message, () => showItem(position));
+    }
+  }
+
+  async function openReader(text, name) {
+    Object.assign(reader, { text, name, total: 0, position: null });
+    const request = ++reader.request;
+    $("reader-heading").textContent = name;
+    $("reader-section").textContent = "";
+    $("reader-close").setAttribute("aria-label", "Close " + name);
+    updateReaderNav();
+    if (!readerDialog.open) readerDialog.showModal();
+    showReaderNote("Loading…");
+    try {
+      await getPage(text, null); // the current total
+    } catch (err) {
+      if (request === reader.request) showReaderError(err.message, () => openReader(text, name));
+      return;
+    }
+    if (request === reader.request) showItem(text in lastPositions ? lastPositions[text] : savedPosition(text));
+  }
+
+  async function addReaderButtons() {
+    let readers;
+    try {
+      const res = await fetch("/read");
+      if (!res.ok) return; // not set up yet
+      readers = (await res.json()).readers || [];
+    } catch (_) {
+      return; // server unreachable: the chat shows its own error when used
+    }
+    for (const r of readers) {
+      if (!r.total) continue;
+      const button = el("button", "ghost", r.name);
+      button.type = "button";
+      button.setAttribute("aria-haspopup", "dialog");
+      button.addEventListener("click", () => openReader(r.text, r.name));
+      clear.before(button);
+    }
+  }
+
+  $("reader-close").addEventListener("click", () => readerDialog.close());
+  readerDialog.addEventListener("click", (event) => {
+    if (event.target === readerDialog) readerDialog.close(); // a click on the backdrop
+  });
+  readerPrev.addEventListener("click", () => showItem(reader.position - 1));
+  readerNext.addEventListener("click", () => showItem(reader.position + 1));
+  readerInput.addEventListener("change", () => {
+    const number = parseInt(readerInput.value, 10);
+    if (number >= 1 && number <= reader.total) showItem(number - 1);
+    else updateReaderNav();
+  });
+  readerDialog.addEventListener("keydown", (event) => {
+    if (event.target === readerInput || event.altKey || event.ctrlKey || event.metaKey || reader.total < 2) return;
+    if (event.key === "ArrowRight") { event.preventDefault(); showItem(reader.position + 1); }
+    if (event.key === "ArrowLeft") { event.preventDefault(); showItem(reader.position - 1); }
+  });
+
+  // ---------- azan times ----------
+  // Calculated in the browser by /static/prayer-times.js, so the location never leaves it.
+
+  const PT = window.PrayerTimes;
+  const PRAYER_KEY = "deen-prayer";
+  const PRAYER_NAMES = { fajr: "Fajr", sunrise: "Sunrise", dhuhr: "Dhuhr", asr: "Asr", maghrib: "Maghrib", isha: "Isha" };
+  const HERE = "here"; // the city select's value for "my location"
+  const prayerDialog = $("prayer");
+  const citySelect = $("prayer-city");
+  const methodSelect = $("prayer-method");
+  const asrSelect = $("prayer-asr");
+  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  let prayer = { place: null, method: "karachi", asr: "hanafi" };
+
+  function loadPrayer() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PRAYER_KEY) || "null");
+      if (saved && typeof saved === "object") {
+        if (PT.METHODS[saved.method]) prayer.method = saved.method;
+        if (PT.ASR_FACTORS[saved.asr]) prayer.asr = saved.asr;
+        const p = saved.place;
+        if (p && isFinite(p.lat) && isFinite(p.lng) && p.timeZone) prayer.place = p;
+      }
+    } catch (_) { /* storage blocked or damaged: start fresh */ }
+  }
+
+  function savePrayer() {
+    try { localStorage.setItem(PRAYER_KEY, JSON.stringify(prayer)); } catch (_) { /* storage blocked */ }
+  }
+
+  function clockFormat(timeZone) {
+    return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone });
+  }
+
+  function untilText(time) {
+    const minutes = Math.max(0, Math.round((time - Date.now()) / 60000));
+    if (minutes < 1) return "now";
+    const parts = [];
+    if (minutes >= 60) parts.push(Math.floor(minutes / 60) + " h");
+    if (minutes % 60) parts.push((minutes % 60) + " min");
+    return "in " + parts.join(" ");
+  }
+
+  function fillPrayerSelects() {
+    let group = null;
+    for (const city of PT.CITIES) {
+      if (!group || group.label !== city.country) {
+        group = document.createElement("optgroup");
+        group.label = city.country;
+        citySelect.append(group);
+      }
+      group.append(new Option(city.name, city.id));
+    }
+    for (const [id, method] of Object.entries(PT.METHODS)) {
+      const angles = method.isha ? method.fajr + "°, " + method.isha + "°" : method.fajr + "°, " + method.ishaMinutes + " min";
+      methodSelect.add(new Option(method.name + " (" + angles + ")", id));
+    }
+  }
+
+  function setHereOption(place) {
+    let option = citySelect.querySelector('option[value="' + HERE + '"]');
+    if (!place) { if (option) option.remove(); return; }
+    if (!option) {
+      option = new Option("", HERE);
+      citySelect.options[0].after(option); // after "Choose a city…", before the countries
+    }
+    option.textContent = placeLabel(place);
+  }
+
+  function placeLabel(place) {
+    if (place.country) return place.name + ", " + place.country;
+    return place.coords ? place.name + " (" + place.coords + ")" : place.name;
+  }
+
+  // The bar under the top bar: the next azan, or an invitation to choose a location.
+  function renderPrayerBar() {
+    const summary = $("prayer-summary");
+    if (!prayer.place) {
+      summary.replaceChildren(el("span", "pb-cta", "Azan times: choose your location"));
+      return;
+    }
+    const next = PT.next(new Date(), prayer.place, prayer);
+    const parts = [el("span", "pb-place", prayer.place.name)];
+    if (next) {
+      const when = el("strong", null, PRAYER_NAMES[next.name] + " " + clockFormat(prayer.place.timeZone).format(next.time));
+      const label = el("span", "pb-next", "Next: ");
+      label.append(when);
+      parts.push(label, el("span", "pb-in", untilText(next.time)));
+    }
+    summary.replaceChildren(...parts);
+  }
+
+  function renderPrayerDialog() {
+    citySelect.value = prayer.place ? (prayer.place.id || HERE) : "";
+    methodSelect.value = prayer.method;
+    asrSelect.value = prayer.asr;
+    const today = $("prayer-today");
+    today.hidden = !prayer.place;
+    if (!prayer.place) return;
+
+    const { timeZone } = prayer.place;
+    const now = new Date();
+    const { times } = PT.forDay(now, prayer.place, prayer);
+    const next = PT.next(now, prayer.place, prayer);
+    const clock = clockFormat(timeZone);
+    const dateText = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone }).format(now);
+    $("prayer-date").textContent = dateText + " · " + placeLabel(prayer.place)
+      + (timeZone !== browserZone ? " (local time there)" : "");
+
+    const list = $("prayer-times");
+    list.replaceChildren();
+    for (const name of ["fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha"]) {
+      const row = el("div", "pt-row" + (name === "sunrise" ? " sunrise" : ""));
+      const isNext = next && next.name === name && times[name] && next.time.getTime() === times[name].getTime();
+      if (isNext) row.classList.add("next");
+      const dt = el("dt", null, PRAYER_NAMES[name]);
+      if (name === "sunrise") dt.append(el("span", "pt-tag", "no azan"));
+      if (isNext) dt.append(el("span", "pt-tag next-tag", "next · " + untilText(next.time)));
+      row.append(dt, el("dd", null, times[name] ? clock.format(times[name]) : "—"));
+      list.append(row);
+    }
+    // After Isha the next azan is tomorrow's Fajr, which isn't in today's list.
+    const tomorrow = next && !Object.values(times).some((t) => t && t.getTime() === next.time.getTime());
+    $("prayer-next").textContent = tomorrow
+      ? "Next azan: Fajr tomorrow at " + clock.format(next.time) + ", " + untilText(next.time) + "."
+      : "";
+  }
+
+  function renderPrayer() {
+    renderPrayerBar();
+    if (prayerDialog.open) renderPrayerDialog();
+  }
+
+  function setPlace(place, method) {
+    prayer.place = place;
+    if (method) prayer.method = method; // a city brings the method usually used there
+    savePrayer();
+    renderPrayer();
+  }
+
+  citySelect.addEventListener("change", () => {
+    setPrayerStatus("");
+    if (citySelect.value === HERE) return; // already the current place
+    const city = PT.CITIES.find((c) => c.id === citySelect.value);
+    if (city) {
+      setHereOption(null);
+      setPlace({ id: city.id, name: city.name, country: city.country, lat: city.lat, lng: city.lng, timeZone: city.timeZone }, city.method);
+    }
+  });
+  methodSelect.addEventListener("change", () => { prayer.method = methodSelect.value; savePrayer(); renderPrayer(); });
+  asrSelect.addEventListener("change", () => { prayer.asr = asrSelect.value; savePrayer(); renderPrayer(); });
+
+  function setPrayerStatus(text, isError) {
+    const status = $("prayer-status");
+    status.textContent = text;
+    status.classList.toggle("error", !!isError);
+  }
+
+  const locate = $("prayer-locate");
+  locate.hidden = !("geolocation" in navigator) || !window.isSecureContext;
+  locate.addEventListener("click", () => {
+    locate.disabled = true;
+    setPrayerStatus("Finding your location…");
+    navigator.geolocation.getCurrentPosition((position) => {
+      locate.disabled = false;
+      setPrayerStatus("");
+      const lat = Math.round(position.coords.latitude * 1e4) / 1e4;
+      const lng = Math.round(position.coords.longitude * 1e4) / 1e4;
+      const coords = Math.abs(lat).toFixed(2) + "°" + (lat >= 0 ? "N" : "S") + ", "
+        + Math.abs(lng).toFixed(2) + "°" + (lng >= 0 ? "E" : "W");
+      const place = { name: "My location", coords, lat, lng, timeZone: browserZone };
+      // Use the calculation method of the nearest listed city, which is usually the local one.
+      const distance = (c) => (c.lat - lat) ** 2 + ((c.lng - lng) * Math.cos(lat * Math.PI / 180)) ** 2;
+      const nearest = PT.CITIES.reduce((best, c) => (distance(c) < distance(best) ? c : best));
+      setHereOption(place);
+      setPlace(place, nearest.method);
+    }, (error) => {
+      locate.disabled = false;
+      setPrayerStatus(error.code === error.PERMISSION_DENIED
+        ? "Location access was turned down. Choose a city instead, or allow location for this site."
+        : "Your location couldn't be found. Choose a city instead.", true);
+    }, { timeout: 15000, maximumAge: 3600000 });
+  });
+
+  $("prayer-open").addEventListener("click", () => {
+    setPrayerStatus("");
+    renderPrayerDialog();
+    prayerDialog.showModal();
+    if (!prayer.place) citySelect.focus();
+  });
+  $("prayer-close").addEventListener("click", () => prayerDialog.close());
+  prayerDialog.addEventListener("click", (event) => {
+    if (event.target === prayerDialog) prayerDialog.close(); // a click on the backdrop
+  });
+
+  fillPrayerSelects();
+  loadPrayer();
+  if (prayer.place && !prayer.place.id) setHereOption(prayer.place);
+  renderPrayer();
+  setInterval(renderPrayer, 30000); // keep the countdown and the day current
+
+  // ---------- events ----------
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const question = input.value.trim();
+    if (!question || busy) return;
+    input.value = "";
+    ask(question);
+  });
+
+  input.addEventListener("input", updateComposer);
+  input.addEventListener("keydown", (event) => {
+    if (finePointer && event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  document.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      if (busy) return;
+      input.value = chip.textContent.trim();
+      form.requestSubmit();
+    });
+  });
+
+  clear.addEventListener("click", () => {
+    if (busy) return;
+    history.length = 0;
+    thread.replaceChildren();
+    empty.hidden = false;
+    input.value = "";
+    updateComposer();
+    chat.scrollTop = 0;
+    focusInput();
+  });
+
+  loadTexts();
+  addReaderButtons();
+  updateComposer();
+  focusInput();
+})();
+</script>
+</body>
+</html>

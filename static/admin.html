@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#fffdf9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1f23" media="(prefers-color-scheme: dark)">
+<title>Deen · Admin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232d5b60'/%3E%3Cpath d='M16 10.5c-2.2-1.6-5-2.2-8-2v13c3-.2 5.8.4 8 2 2.2-1.6 5-2.2 8-2v-13c-3-.2-5.8.4-8 2zm0 0v13' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  /* Source Serif 4 (SIL Open Font License, see /static/fonts/OFL.txt), for headings. */
+  @font-face {
+    font-family: "Source Serif 4";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/source-serif-4-latin.woff2) format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+
+  /* Same tokens as the chat page (static/index.html). */
+  :root {
+    --bg: #f5f2ec;
+    --surface: #fffdf9;
+    --ink: #22252a;
+    --muted: #686c73;
+    --border: #e3ddd2;
+    --border-strong: #8e887d;
+    --accent: #2d5b60;
+    --accent-hover: #234a4e;
+    --on-accent: #ffffff;
+    --focus-ring: rgba(45, 91, 96, .18);
+    --selection: #cfe0df;
+    --badge-bg: #e6eeee;
+    --badge-ink: #2d5b60;
+    --ok-ink: #2d5b60;
+    --warn-bg: #fbf3e2;
+    --warn-ink: #6e4b0c;
+    --warn-border: #ecd9ae;
+    --error-bg: #fbeceb;
+    --error-ink: #8a2c24;
+    --error-border: #efc9c5;
+    --shadow: 0 1px 2px rgba(40, 30, 10, .05), 0 4px 14px rgba(40, 30, 10, .04);
+    --radius: 14px;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+    accent-color: var(--accent);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141619;
+      --surface: #1c1f23;
+      --ink: #e7e5e1;
+      --muted: #9a9fa6;
+      --border: #2c3036;
+      --border-strong: #666d77;
+      --accent: #7fb3b3;
+      --accent-hover: #96c4c4;
+      --on-accent: #0f1f1f;
+      --focus-ring: rgba(127, 179, 179, .22);
+      --selection: #2f5154;
+      --badge-bg: #213739;
+      --badge-ink: #a9d0cf;
+      --ok-ink: #a9d0cf;
+      --warn-bg: #352a14;
+      --warn-ink: #f0d39a;
+      --warn-border: #5a4620;
+      --error-bg: #3a1f1d;
+      --error-ink: #f2b8b1;
+      --error-border: #5c302b;
+      --shadow: none;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scrollbar-gutter: stable; scrollbar-color: var(--border-strong) transparent; }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { touch-action: manipulation; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::selection { background: var(--selection); color: var(--ink); }
+  h1, h2, h3 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+  [hidden] { display: none !important; }
+  code { font: 13px/1.5 var(--mono); }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px 14px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin-right: auto; }
+  .brand h1 { margin: 0; font: 600 22px/1.2 var(--serif); }
+  .brand span { color: var(--muted); font-size: 13px; }
+  .ghost {
+    font-size: 13px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--ink);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color .15s ease-out;
+  }
+  .ghost:hover { background: var(--bg); }
+  .ghost:active { transform: translateY(1px); }
+
+  /* Layout */
+  .page { max-width: 760px; margin: 0 auto; padding: 28px 16px 64px; }
+  .section-head { margin: 36px 0 14px; }
+  .section-head:first-child { margin-top: 0; }
+  .section-head h2 { margin: 0 0 4px; font: 600 24px/1.25 var(--serif); }
+  .section-head p { margin: 0; color: var(--muted); max-width: 62ch; }
+  .section-head .status { margin-top: 12px; max-width: none; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+  }
+  .card + .card { margin-top: 14px; }
+  .card h3 { margin: 0 0 14px; font: 600 16px/1.4 var(--sans); }
+  .card h3 small { font-weight: 400; color: var(--muted); }
+  .signin { max-width: 420px; margin: 9vh auto 0; }
+  .signin h2 { margin: 0 0 6px; font: 600 26px/1.2 var(--serif); }
+  .signin p { margin: 0 0 18px; color: var(--muted); }
+
+  /* Forms */
+  .fields { display: grid; gap: 14px; }
+  .fields.two { grid-template-columns: 1fr 1fr; }
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .field label { font-size: 13px; font-weight: 600; }
+  .field .help { font-size: 12.5px; color: var(--muted); }
+  .url-field { margin-top: 14px; }
+  .field input[type="text"], .field input[type="password"], .field input[type="url"] {
+    width: 100%;
+    font-size: 15px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    transition: border-color .15s ease-out, box-shadow .15s ease-out;
+  }
+  .field input::placeholder { color: var(--muted); opacity: 1; }
+  .field input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+  .field input.secret, .field input.mono { font-family: var(--mono); font-size: 14px; }
+  .field input[type="file"] {
+    width: 100%;
+    font-size: 14px;
+    padding: 8px;
+    background: var(--bg);
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .field input[type="file"]::file-selector-button {
+    margin-right: 10px;
+    font: inherit;
+    font-size: 13px;
+    padding: 5px 12px;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 18px; }
+  .fields > .actions { margin-top: 4px; }
+  .primary {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 16px;
+    color: var(--on-accent);
+    background: var(--accent);
+    border: 0;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background-color .15s ease-out, opacity .15s ease-out;
+  }
+  .primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .primary:active:not(:disabled) { transform: translateY(1px); }
+  .primary:disabled { opacity: .5; cursor: default; }
+  .danger {
+    flex: none;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    color: var(--error-ink);
+    background: transparent;
+    border: 1px solid var(--error-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color .15s ease-out;
+  }
+  .danger:hover:not(:disabled) { background: var(--error-bg); }
+  .danger:active:not(:disabled) { transform: translateY(1px); }
+  .danger:disabled { color: var(--muted); border-color: var(--border); cursor: default; }
+
+  /* Status messages */
+  .status { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .status:empty { display: none; }
+  .status.ok { color: var(--ok-ink); font-weight: 600; }
+  .status.error, .status.warn { padding: 8px 12px; border-radius: 8px; border: 1px solid; flex-basis: 100%; }
+  .status.error { color: var(--error-ink); background: var(--error-bg); border-color: var(--error-border); }
+  .status.warn { color: var(--warn-ink); background: var(--warn-bg); border-color: var(--warn-border); }
+  .card > .status.error { margin-top: 14px; }
+  #index-summary[hidden] + .status.error { margin-top: 0; }
+
+  /* Index summary */
+  .index-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 12px; }
+  .index-line strong { font-family: var(--mono); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+  .index-line span { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .namespaces { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .namespaces li {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 12px;
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .namespaces .count { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .namespaces .none { border-style: dashed; color: var(--muted); }
+  .note { margin: 12px 0 0; font-size: 12.5px; color: var(--muted); }
+
+  /* Upload help and log */
+  .formats { margin-top: 14px; font-size: 13.5px; }
+  .formats summary { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 600; list-style: none; cursor: pointer; border-radius: 4px; }
+  .formats summary::-webkit-details-marker { display: none; }
+  .chev { flex: none; transition: transform .2s cubic-bezier(.16, 1, .3, 1); }
+  .formats[open] .chev { transform: rotate(90deg); }
+  .formats summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .formats ul { margin: 10px 0 0; padding-inline-start: 1.3em; color: var(--muted); }
+  .formats li + li { margin-top: 6px; }
+  .formats li strong { color: var(--ink); font-weight: 600; }
+  .formats pre {
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    overflow-x: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--ink);
+  }
+  .log { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+  .log:empty { display: none; }
+  .log li { padding-inline-start: 23px; position: relative; overflow-wrap: anywhere; }
+  .log li::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 0;
+    top: 2px;
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: var(--icon) center / contain no-repeat;
+    mask: var(--icon) center / contain no-repeat;
+  }
+  .log li.pending { color: var(--muted); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E"); }
+  .log li.ok { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E"); }
+  .log li.ok::before { background: var(--ok-ink); }
+  .log li.error { color: var(--error-ink); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5M12 16.5h.01'/%3E%3C/svg%3E"); }
+
+  /* Uploaded files */
+  .files { margin: 0; padding: 0; list-style: none; }
+  .file { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .file:first-child { border-top: 0; padding-top: 0; }
+  .file:last-child { padding-bottom: 0; }
+  .file-info { flex: 1; min-width: 0; }
+  .file-name { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .file-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-top: 2px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .badge { background: var(--badge-bg); color: var(--badge-ink); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
+  .empty-files { margin: 0; color: var(--muted); }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+
+  @media (max-width: 600px) {
+    .topbar { padding: 10px 16px; }
+    .brand span { display: none; }
+    .ghost { padding: 8px 12px; }
+    .page { padding: 20px 12px 48px; }
+    .card { padding: 16px; }
+    .fields.two { grid-template-columns: 1fr; }
+    .field input[type="text"], .field input[type="password"], .field input[type="url"] { font-size: 16px; } /* stops iOS zooming on focus */
+    .section-head h2 { font-size: 22px; }
+    .signin { margin-top: 5vh; }
+    .file { align-items: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ghost, .primary, .danger, .field input, .chev { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Deen</h1>
+      <span>Admin</span>
+    </div>
+    <a class="ghost" href="/">Open chat</a>
+    <button type="button" class="ghost" id="signout" hidden>Sign out</button>
+  </header>
+
+  <main class="page">
+    <!-- Sign in -->
+    <section class="card signin" id="signin" aria-labelledby="signin-title">
+      <h2 id="signin-title">Admin sign-in</h2>
+      <p>Enter the admin token. It's the <code>ADMIN_TOKEN</code> value in the server's <code>.env</code> file.</p>
+      <form id="signin-form" class="fields">
+        <div class="field">
+          <label for="token">Admin token</label>
+          <input type="password" id="token" class="secret" autocomplete="current-password" required>
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary">Sign in</button>
+          <p class="status" id="signin-status" role="status"></p>
+        </div>
+      </form>
+    </section>
+
+    <div id="panel" hidden>
+      <!-- Credentials -->
+      <div class="section-head">
+        <h2>Credentials</h2>
+        <p>New values are tested before they're saved. Once saved, they're kept in the server's database and every new question uses them.</p>
+        <p class="status" id="setup-status" role="status"></p>
+      </div>
+
+      <form class="card" id="groq-form" aria-labelledby="groq-title">
+        <h3 id="groq-title">Language model <small>· Groq</small></h3>
+        <div class="fields two">
+          <div class="field">
+            <label for="groq-key">API key</label>
+            <input type="password" id="groq-key" class="secret" autocomplete="off" spellcheck="false" aria-describedby="groq-key-help">
+            <span class="help" id="groq-key-help">Leave blank to keep the current key.</span>
+          </div>
+          <div class="field">
+            <label for="groq-model">Model</label>
+            <input type="text" id="groq-model" class="mono" autocomplete="off" spellcheck="false" required aria-describedby="groq-model-help">
+            <span class="help" id="groq-model-help">For example <code>openai/gpt-oss-120b</code>.</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary">Test and save</button>
+          <p class="status" id="groq-status" role="status"></p>
+        </div>
+      </form>
+
+      <form class="card" id="pc-form" aria-labelledby="pc-title">
+        <h3 id="pc-title">Vector index <small>· Pinecone</small></h3>
+        <div class="fields">
+          <div class="field">
+            <label for="pc-key">API key</label>
+            <input type="password" id="pc-key" class="secret" autocomplete="off" spellcheck="false" aria-describedby="pc-key-help">
+            <span class="help" id="pc-key-help">Leave blank to keep the current key.</span>
+          </div>
+          <div class="fields two">
+            <div class="field">
+              <label for="pc-index">Index name</label>
+              <input type="text" id="pc-index" class="mono" autocomplete="off" spellcheck="false" required>
+            </div>
+            <div class="field">
+              <label for="pc-model">Embedding model</label>
+              <input type="text" id="pc-model" class="mono" autocomplete="off" spellcheck="false" required aria-describedby="pc-model-help">
+              <span class="help" id="pc-model-help">Must be the model the index's texts were embedded with.</span>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary">Test and save</button>
+          <p class="status" id="pc-status" role="status"></p>
+        </div>
+      </form>
+
+      <!-- Files -->
+      <div class="section-head">
+        <h2>Files</h2>
+        <p>Upload a file to add its passages to a text in the index, so answers can cite it. Delete a file to remove its passages again.</p>
+      </div>
+
+      <section class="card" aria-labelledby="index-title">
+        <h3 id="index-title" class="sr-only">Texts in the index</h3>
+        <div id="index-summary">
+          <p class="index-line"><strong id="index-name"></strong><span id="index-count">Loading…</span></p>
+          <ul class="namespaces" id="namespaces" aria-label="Texts in the index"></ul>
+          <p class="note">Vector counts can take a minute to catch up after an upload or delete.</p>
+        </div>
+        <p class="status" id="index-status" role="status"></p>
+      </section>
+
+      <form class="card" id="upload-form" aria-labelledby="upload-title">
+        <h3 id="upload-title">Upload files</h3>
+        <div class="fields two">
+          <div class="field">
+            <label for="namespace">Text</label>
+            <input type="text" id="namespace" class="mono" list="namespace-list" autocomplete="off" spellcheck="false"
+                   required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,62}" placeholder="e.g. quran" aria-describedby="namespace-help">
+            <datalist id="namespace-list"></datalist>
+            <span class="help" id="namespace-help">Pick a text, or type a new name to create one (letters, digits, <code>-</code> and <code>_</code>).</span>
+          </div>
+          <div class="field">
+            <label for="file-input">Files</label>
+            <input type="file" id="file-input" multiple accept=".txt,.md,.pdf,.json,.jsonl,.csv" aria-describedby="file-help">
+            <span class="help" id="file-help">.txt, .md, .pdf, .json, .jsonl or .csv, up to 200 MB each (.json up to 50 MB; use .jsonl for bigger record files).</span>
+          </div>
+        </div>
+        <div class="field url-field">
+          <label for="url-input">Or download from a web address</label>
+          <input type="url" id="url-input" class="mono" placeholder="https://example.org/duas.json" autocomplete="off" spellcheck="false" aria-describedby="url-help">
+          <span class="help" id="url-help">A direct link to one of those file types, up to 200 MB. The server downloads it, then adds it like an uploaded file.</span>
+        </div>
+        <details class="formats">
+          <summary><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>How files are split and cited</summary>
+          <ul>
+            <li><strong>.txt, .md</strong>: split into passages of about 1,000 characters.</li>
+            <li><strong>.pdf</strong>: the text of each page, split the same way, with its page number. Scanned PDFs need OCR first.</li>
+            <li><strong>.json, .jsonl, .csv</strong>: one record per array item, line or row. Each record needs a <code>text</code> (or <code>content</code>) field. Its other fields are kept, so answers can cite them: <code>surah</code> and <code>ayah</code> for the Quran; <code>collection</code>, <code>hadith_number</code>, <code>grade</code> and <code>book</code> for hadith.
+              <pre><code>{"text": "Actions are judged by intentions…", "collection": "Sahih al-Bukhari", "hadith_number": 1, "grade": "Sahih"}</code></pre>
+            </li>
+            <li>Files uploaded to the text named <code>duas</code> or <code>namaz</code> can also be read one by one from the chat page's <strong>Duas</strong> or <strong>Namaz Shikkha</strong> button, in upload order. Put Namaz Shikkha steps in the order they're done. Give each record a <code>text</code> (the meaning or instruction) and, if you have them, <code>section</code> (e.g. Wudu), <code>title</code>, <code>arabic</code>, <code>transliteration</code> and its source, such as <code>surah</code> and <code>ayah</code>, or <code>collection</code>, <code>hadith_number</code> and <code>grade</code>.
+              <pre><code>{"title": "For good in both worlds", "arabic": "رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الْآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ", "transliteration": "Rabbana atina fid-dunya hasanatan wa fil-akhirati hasanatan wa qina 'adhaban-nar", "text": "Our Lord, give us good in this world and good in the Hereafter, and protect us from the punishment of the Fire.", "surah": 2, "ayah": 201}</code></pre>
+            </li>
+            <li>Uploading a file with the same name to the same text again replaces the earlier version, and keeps its place in a reader. A file from a web address is named after the address (or the name the site gives it), so downloading the same address again replaces it too.</li>
+          </ul>
+        </details>
+        <div class="actions">
+          <button type="submit" class="primary" id="upload-button">Upload</button>
+        </div>
+        <ul class="log" id="upload-log" aria-live="polite" aria-label="Upload progress"></ul>
+      </form>
+
+      <section class="card" aria-labelledby="files-title">
+        <h3 id="files-title">Uploaded files</h3>
+        <ul class="files" id="files"></ul>
+        <p class="empty-files" id="files-empty" hidden>No files have been uploaded to this index from this page yet. Texts indexed some other way are counted above, but can't be deleted here.</p>
+        <p class="empty-files" id="files-unavailable" hidden>Uploaded files are listed here once the index can be reached.</p>
+        <p class="status" id="files-status" role="status"></p>
+      </section>
+    </div>
+  </main>
+
+<script>
+(() => {
+  "use strict";
+
+  const TOKEN_KEY = "deen-admin-token";
+  const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // matches MAX_LARGE_UPLOAD_BYTES in main.py
+  const GROQ_FIELDS = [["groq-key", "groq_api_key"], ["groq-model", "groq_model"]];
+  const PINECONE_FIELDS = [["pc-key", "pinecone_api_key"], ["pc-index", "index_name"], ["pc-model", "embedding_model"]];
+  const SECRET_KEYS = new Set(["groq_api_key", "pinecone_api_key"]);
+  const $ = (id) => document.getElementById(id);
+  const numberFormat = new Intl.NumberFormat();
+  let token = "";
+
+  // A rejected or missing token. The sign-in form already shows the message.
+  class AuthError extends Error {}
+
+  // ---------- helpers ----------
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  // Mirrors display_name() in main.py.
+  function prettyName(ns) {
+    if (!ns || ns === "__default__") return "Untitled text";
+    return ns.replace(/[_-]/g, " ").trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function plural(n, word) {
+    return numberFormat.format(n) + " " + word + (n === 1 ? "" : "s");
+  }
+
+  function fileSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " KB";
+    return (bytes / 1024 / 1024).toFixed(1) + " MB";
+  }
+
+  function when(iso) {
+    const date = new Date(iso);
+    return isNaN(date) ? "" : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  function setStatus(node, message, kind) {
+    node.textContent = message || "";
+    node.className = "status" + (kind ? " " + kind : "");
+  }
+
+  function storeToken(value) {
+    token = value;
+    try {
+      if (value) sessionStorage.setItem(TOKEN_KEY, value);
+      else sessionStorage.removeItem(TOKEN_KEY);
+    } catch (_) { /* storage blocked: stay signed in until the page closes */ }
+  }
+
+  // FastAPI errors arrive as {detail: string | {message, ...} | [{loc, msg}, ...]}.
+  async function readError(res) {
+    let detail;
+    try { detail = (await res.json()).detail; } catch (_) { /* not JSON */ }
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d) => {
+        const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : "";
+        const msg = String(d.msg || "").replace(/^Value error, /, "");
+        return field && field !== "body" ? field + ": " + msg : msg;
+      }).filter(Boolean).join("; ") || "Invalid request.";
+    }
+    if (detail && detail.message) return detail.message;
+    return "The server returned an error (HTTP " + res.status + ").";
+  }
+
+  async function api(path, options = {}) {
+    let res;
+    try {
+      res = await fetch("/admin/api" + path, {
+        ...options,
+        headers: { ...(options.headers || {}), Authorization: "Bearer " + token },
+      });
+    } catch (_) {
+      throw new Error("Could not reach the server. Check that it is running, then try again.");
+    }
+    // 401: wrong token. 403: the admin page is turned off (no ADMIN_TOKEN on the server).
+    if (res.status === 401 || res.status === 403) {
+      const message = await readError(res);
+      signOut(message);
+      throw new AuthError(message);
+    }
+    if (!res.ok) {
+      const error = new Error(await readError(res.clone()));
+      error.status = res.status;
+      try { error.detail = (await res.json()).detail; } catch (_) { /* not JSON */ }
+      throw error;
+    }
+    return res.json();
+  }
+
+  function showError(node, err) {
+    if (!(err instanceof AuthError)) setStatus(node, err.message, "error");
+  }
+
+  // ---------- sign-in ----------
+
+  function showPanel(signedIn) {
+    $("signin").hidden = signedIn;
+    $("panel").hidden = !signedIn;
+    $("signout").hidden = !signedIn;
+  }
+
+  function signOut(message) {
+    storeToken("");
+    showPanel(false);
+    $("token").value = "";
+    setStatus($("signin-status"), message || "", message ? "error" : "");
+    $("token").focus();
+  }
+
+  async function signIn(value) {
+    storeToken(value);
+    const settings = await api("/settings");
+    fillSettings(settings, [...GROQ_FIELDS, ...PINECONE_FIELDS]);
+    showPanel(true);
+    loadFiles();
+  }
+
+  $("signin-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const value = $("token").value.trim();
+    if (!value) return;
+    const button = event.currentTarget.querySelector("button");
+    const status = $("signin-status");
+    button.disabled = true;
+    setStatus(status, "Checking…");
+    try {
+      await signIn(value);
+      setStatus(status, "");
+    } catch (err) {
+      showError(status, err);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $("signout").addEventListener("click", () => signOut());
+
+  // ---------- credentials ----------
+
+  function fillSettings(settings, fields) {
+    for (const [id, key] of fields) {
+      const input = $(id);
+      if (SECRET_KEYS.has(key)) {
+        input.value = "";
+        input.placeholder = settings[key] ? "Current key: " + settings[key] : "Not set";
+      } else {
+        input.value = settings[key];
+      }
+    }
+    const missing = settings.missing || [];
+    setStatus($("setup-status"), missing.length
+      ? "Deen can't answer questions until these are entered: " + missing.join(", ") + "."
+      : "", missing.length ? "warn" : "");
+  }
+
+  function bindSettingsForm(formId, fields, statusId) {
+    const form = $(formId);
+    const status = $(statusId);
+    const button = form.querySelector("button[type=submit]");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const body = {};
+      for (const [id, key] of fields) {
+        const value = $(id).value.trim();
+        if (value) body[key] = value;
+      }
+      button.disabled = true;
+      setStatus(status, "Testing the new settings…");
+      try {
+        const result = await api("/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        fillSettings(result.settings, fields);
+        if (!result.changed.length) {
+          setStatus(status, "Nothing changed.");
+        } else {
+          // Anything still missing is shown at the top of the page.
+          setStatus(status, result.settings.missing.length ? "Saved." : "Saved. New questions use these settings.", "ok");
+          loadFiles();
+        }
+      } catch (err) {
+        showError(status, err);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  bindSettingsForm("groq-form", GROQ_FIELDS, "groq-status");
+  bindSettingsForm("pc-form", PINECONE_FIELDS, "pc-status");
+
+  // ---------- files ----------
+
+  function renderIndex(data) {
+    $("index-name").textContent = data.index;
+    $("index-count").textContent = plural(data.total_vector_count, "vector");
+    const chips = $("namespaces");
+    const options = $("namespace-list");
+    chips.replaceChildren();
+    options.replaceChildren();
+    for (const ns of data.namespaces) {
+      const chip = el("li");
+      chip.title = ns.namespace || "(default namespace)";
+      chip.append(el("span", null, prettyName(ns.namespace)), el("span", "count", numberFormat.format(ns.vector_count)));
+      chips.append(chip);
+      if (ns.namespace && ns.namespace !== "__default__") options.append(new Option(prettyName(ns.namespace), ns.namespace));
+    }
+    if (!data.namespaces.length) chips.append(el("li", "none", "No texts yet"));
+  }
+
+  function renderFiles(files) {
+    const list = $("files");
+    list.replaceChildren();
+    $("files-empty").hidden = files.length > 0;
+    for (const file of files) {
+      const row = el("li", "file");
+      const info = el("div", "file-info");
+      const name = el("span", "file-name", file.filename);
+      name.dir = "auto";
+      const meta = el("div", "file-meta");
+      meta.append(
+        el("span", "badge", prettyName(file.namespace)),
+        el("span", null, plural(file.passages, "passage")),
+        el("span", null, fileSize(file.size_bytes)),
+        el("span", null, when(file.uploaded_at)),
+      );
+      info.append(name, meta);
+      const remove = el("button", "danger", "Delete");
+      remove.type = "button";
+      remove.setAttribute("aria-label", "Delete " + file.filename + " from " + prettyName(file.namespace));
+      remove.addEventListener("click", () => deleteFile(file, remove));
+      row.append(info, remove);
+      list.append(row);
+    }
+  }
+
+  async function loadFiles() {
+    try {
+      const data = await api("/files");
+      renderIndex(data);
+      renderFiles(data.files);
+      $("index-summary").hidden = false;
+      $("files-unavailable").hidden = true;
+      setStatus($("index-status"), "");
+      return true;
+    } catch (err) {
+      if (err instanceof AuthError) return false;
+      // Without the index there is nothing to summarise or list: say why instead of showing empty boxes.
+      $("index-summary").hidden = true;
+      $("files").replaceChildren();
+      $("files-empty").hidden = true;
+      $("files-unavailable").hidden = false;
+      showError($("index-status"), err);
+      return false;
+    }
+  }
+
+  async function deleteFile(file, button) {
+    const question = "Delete “" + file.filename + "” from " + prettyName(file.namespace) + "?\n\n"
+      + "Its " + plural(file.passages, "passage") + " will be removed from Pinecone, and answers will stop citing them.";
+    if (!confirm(question)) return;
+    const status = $("files-status");
+    button.disabled = true;
+    button.textContent = "Deleting…";
+    try {
+      const path = "/files/" + encodeURIComponent(file.file_id) + "?namespace=" + encodeURIComponent(file.namespace);
+      await api(path, { method: "DELETE" });
+      await loadFiles();
+      setStatus(status, "Deleted “" + file.filename + "”.", "ok");
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = "Delete";
+      showError(status, err);
+    }
+  }
+
+  function uploadMessage(label, result, namespace) {
+    let message = label + ": added " + plural(result.file.passages, "passage") + " to " + prettyName(namespace) + ".";
+    if (result.replaced_versions) message += " It replaced the earlier version.";
+    if (result.skipped_records) {
+      message += " Skipped " + plural(result.skipped_records, "record") + " with no text or content field.";
+    }
+    return message;
+  }
+
+  // A web address shortened for the progress list: host and file name, e.g. "example.org/duas.json".
+  function shortUrl(url) {
+    try {
+      const u = new URL(url);
+      const last = u.pathname.split("/").filter(Boolean).pop();
+      return u.host + (last ? "/" + decodeURIComponent(last) : "");
+    } catch (_) {
+      return url;
+    }
+  }
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function megabytes(bytes) {
+    return (bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0) + " MB";
+  }
+
+  // Send a file in parts. After a 409 the server says how much it has, so carry on from there;
+  // after a network error, retry the same part a few times.
+  async function sendParts(job, file, report) {
+    let offset = 0;
+    let failures = 0;
+    while (offset < file.size) {
+      try {
+        const status = await api("/jobs/" + job.id + "/data?offset=" + offset, {
+          method: "PUT",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: file.slice(offset, offset + job.chunk_bytes),
+        });
+        offset = status.received;
+        failures = 0;
+        report("sending " + Math.floor((offset / file.size) * 100) + "% (" + megabytes(offset) + " of " + megabytes(file.size) + ")");
+      } catch (err) {
+        if (err instanceof AuthError) throw err;
+        if (err.status === 409 && err.detail && typeof err.detail.received === "number") {
+          offset = err.detail.received;
+          continue;
+        }
+        if (err.status || ++failures > 3) throw err;
+        await sleep(1000 * failures);
+      }
+    }
+  }
+
+  // Wait for the server to finish a job, showing its progress; returns the upload result.
+  async function followJob(id, report) {
+    let failures = 0;
+    for (;;) {
+      let job;
+      try {
+        job = await api("/jobs/" + id);
+        failures = 0;
+      } catch (err) {
+        if (err instanceof AuthError || err.status || ++failures > 5) throw err;
+        await sleep(2000 * failures);  // the server may be busy or restarting
+        continue;
+      }
+      if (job.state === "done") return job.result;
+      if (job.state === "failed") throw new Error(job.error || "The upload failed.");
+      report(job.state === "downloading"
+        ? "downloading… " + megabytes(job.received)
+        : "embedding and storing…" + (job.passages ? " " + plural(job.passages, "passage") + " so far" : ""));
+      await sleep(1500);
+    }
+  }
+
+  $("upload-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const namespace = $("namespace").value.trim();
+    const input = $("file-input");
+    const urlInput = $("url-input");
+    const files = [...input.files];
+    const url = urlInput.value.trim();
+    const log = $("upload-log");
+    if (!namespace) return;
+    if (!files.length && !url) {
+      log.replaceChildren(el("li", "error", "Choose a file, or enter a web address."));
+      return;
+    }
+    const button = $("upload-button");
+    button.disabled = true;
+    log.replaceChildren();
+    setStatus($("files-status"), "");
+    const json = { "Content-Type": "application/json" };
+    // Each upload: a label for the progress list, and how to send it. Everything goes through a
+    // job on the server: the file in parts, or the address to download, then processing in the background.
+    const jobs = files.map((file) => ({
+      label: file.name,
+      problem: file.size > MAX_UPLOAD_BYTES ? "larger than 200 MB, so it was skipped."
+        : file.size === 0 ? "the file is empty." : null,
+      send: async (report) => {
+        const job = await api("/jobs", { method: "POST", headers: json, body: JSON.stringify({ namespace, filename: file.name, size: file.size }) });
+        await sendParts(job, file, report);
+        await api("/jobs/" + job.id + "/finish", { method: "POST" });
+        return followJob(job.id, report);
+      },
+    }));
+    if (url) {
+      jobs.push({
+        label: shortUrl(url),
+        fromUrl: true,
+        send: async (report) => {
+          const job = await api("/jobs", { method: "POST", headers: json, body: JSON.stringify({ namespace, url }) });
+          return followJob(job.id, report);
+        },
+      });
+    }
+    let uploaded = 0;
+    for (const job of jobs) {
+      const item = el("li", "pending", job.label + ": starting…");
+      log.append(item);
+      if (job.problem) {
+        item.className = "error";
+        item.textContent = job.label + ": " + job.problem;
+        continue;
+      }
+      try {
+        const result = await job.send((text) => { item.textContent = job.label + ": " + text; });
+        const label = job.fromUrl ? result.file.filename + " (from " + job.label + ")" : job.label;
+        item.className = "ok";
+        item.textContent = uploadMessage(label, result, namespace);
+        uploaded++;
+        if (job.fromUrl) urlInput.value = "";
+      } catch (err) {
+        if (err instanceof AuthError) break;
+        item.className = "error";
+        item.textContent = job.label + ": " + err.message;
+      }
+    }
+    button.disabled = false;
+    if (uploaded) {
+      input.value = "";
+      await loadFiles();
+    }
+  });
+
+  // ---------- start ----------
+
+  let saved = "";
+  try { saved = sessionStorage.getItem(TOKEN_KEY) || ""; } catch (_) { /* storage blocked */ }
+  if (saved) {
+    $("signin").hidden = true; // don't flash the sign-in form while the saved token is checked
+    signIn(saved).catch((err) => {
+      showPanel(false);
+      showError($("signin-status"), err);
+    });
+  } else {
+    $("token").focus();
+  }
+})();
+</script>
+</body>
+</html>
