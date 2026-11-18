@@ -1,4 +1,4 @@
-"""Test setup: an isolated database per test, no real credentials, and fakes for Pinecone and Groq.
+"""Test setup: an isolated database per test, no real credentials, and fakes for Pinecone, Groq and Redis.
 
 Run with:  pytest
 """
@@ -6,19 +6,19 @@ Run with:  pytest
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
+import fakeredis
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 # Before main is imported: load_dotenv() doesn't override variables that are already set, so these
-# keep the real .env out of the tests.
+# keep the real .env out of the tests. With REDIS_URL empty, the real database can't be reached.
 ADMIN_TOKEN = "test-admin-token-0123456789-abcdef"
 os.environ.update({
-    "DB_PATH": str(Path(tempfile.mkdtemp()) / "import.db"),
+    "REDIS_URL": "",
     "ADMIN_TOKEN": ADMIN_TOKEN,
     "PINECONE_API_KEY": "", "PINECONE_INDEX_NAME": "", "PINECONE_EMBEDDING_MODEL": "",
     "GROQ_API_KEY": "", "GROQ_MODEL": "", "MIN_RELEVANCE_SCORE": "",
@@ -128,7 +128,9 @@ AUTH = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
     """A fresh database and no cached clients, statistics or rate-limit counts for every test."""
-    monkeypatch.setenv("DB_PATH", str(tmp_path / "deen.db"))
+    redis = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(main.db, "client", lambda: redis)
+    monkeypatch.setattr(main, "PARTS_DIR", tmp_path / "upload-parts")
     monkeypatch.setattr(main.time, "sleep", lambda seconds: None)
     main.set_resources(None)
     main._stats_cache = (None, 0.0, {})

@@ -25,7 +25,7 @@ Deen answers questions about Islam from the Quran and Hadith. Every answer is gr
 ## Operating Context
 
 - Public website. A FastAPI app serves the chat page at `/`, and the page calls `POST /query` and `GET /texts`.
-- Reads an existing Pinecone index with one namespace per text. The public site never edits the index. An admin page at `/admin`, protected by `ADMIN_TOKEN`, can upload files into it, delete them again, and swap the Groq and Pinecone credentials, which are kept in a SQLite database rather than in `.env`.
+- Reads an existing Pinecone index with one namespace per text. The public site never edits the index. An admin page at `/admin`, protected by `ADMIN_TOKEN`, can upload files into it, delete them again, and swap the Groq and Pinecone credentials, which are kept in a Redis database rather than in `.env`.
 - Embeds queries with Pinecone Inference (`multilingual-e5-large` by default), so questions in Arabic and Bengali can be matched as well as English ones.
 - Generates answers with a Groq-hosted LLM (`openai/gpt-oss-120b` by default; `llama-3.3-70b-versatile` was retired by Groq in 2026).
 - The API keeps no state between requests. The chat page sends the last 4 exchanges with each question so follow-up questions work. Reloading the page or pressing **New chat** clears them.

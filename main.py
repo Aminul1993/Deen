@@ -6,7 +6,7 @@ index, with one namespace per text (e.g. "quran", "bukhari"). Answers come back
 in the language of the question (English, Arabic, Bengali, ...). The public
 endpoints only read the index; the admin page (/admin, protected by ADMIN_TOKEN)
 can swap the Groq and Pinecone credentials and upload or delete files. The
-credentials are kept in a SQLite database (db.py), not in the environment.
+credentials are kept in a Redis database (db.py), not in the environment.
 
 Run with:  uvicorn main:app --host 0.0.0.0 --port 8000
 Chat UI:   http://localhost:8000/  (static/index.html)
@@ -99,6 +99,7 @@ MAX_LARGE_UPLOAD_BYTES = 200 * 1024 * 1024  # a file sent in parts, or downloade
 UPLOAD_CHUNK_BYTES = 5 * 1024 * 1024  # size of each part the admin page sends
 JOB_KEEP_HOURS = 24  # finished or abandoned large uploads are forgotten after this
 JOB_STALLED_MINUTES = 10  # a background upload with no progress for this long has died with its server
+PARTS_DIR = Path(__file__).resolve().parent / "data" / "upload-parts"  # large uploads, until their job ends
 EMBED_BATCH = 96  # most inputs Pinecone Inference accepts per request for multilingual-e5-large
 UPSERT_BATCH = 50  # keeps each upsert well under Pinecone's 2 MB request limit
 DELETE_BATCH = 1000  # most ids Pinecone deletes per request
@@ -319,9 +320,9 @@ def import_env_credentials() -> None:
     if values:
         db.save_settings(values)
         logger.warning(
-            "Copied %s from the environment into %s. From now on credentials are read only from the "
-            "database and changed on the admin page; remove them from .env.",
-            ", ".join(SETTING_ENV_VARS[name] for name in values), db.database_path(),
+            "Copied %s from the environment into the Redis database. From now on credentials are read only "
+            "from the database and changed on the admin page; remove them from .env.",
+            ", ".join(SETTING_ENV_VARS[name] for name in values),
         )
 
 
@@ -1710,7 +1711,7 @@ _parts_lock = threading.Lock()  # one part appended at a time
 
 
 def _part_path(job_id: str) -> Path:
-    return db.database_path().parent / "upload-parts" / f"{job_id}.part"
+    return PARTS_DIR / f"{job_id}.part"
 
 
 def _iso_ago(**delta: float) -> str:

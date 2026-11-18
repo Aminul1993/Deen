@@ -134,21 +134,22 @@ def test_a_file_with_nothing_to_index_fails_with_the_reason(client, small_parts)
     assert job["state"] == "failed" and "no text" in job["error"]
 
 
-def test_a_stalled_job_is_reported_as_failed(client):
+def test_a_stalled_job_is_reported_as_failed(client, monkeypatch):
     install()
     job = client.post("/admin/api/jobs", headers=AUTH, json={"namespace": "x", "filename": "f.txt", "size": 5}).json()
-    with db._connect() as conn:  # as if its server stopped 20 minutes ago, mid-way
-        conn.execute("UPDATE upload_jobs SET state = 'processing', updated_at = ? WHERE id = ?",
-                     (main._iso_ago(minutes=20), job["id"]))
+    with monkeypatch.context() as m:  # as if its server stopped 20 minutes ago, mid-way
+        m.setattr(db, "_now", lambda: main._iso_ago(minutes=20))
+        db.update_job(job["id"], state="processing")
     status = client.get(f"/admin/api/jobs/{job['id']}", headers=AUTH).json()
     assert status["state"] == "failed" and "stopped" in status["error"]
 
 
-def test_old_jobs_and_their_parts_are_forgotten(client):
+def test_old_jobs_and_their_parts_are_forgotten(client, monkeypatch):
     install()
     old = client.post("/admin/api/jobs", headers=AUTH, json={"namespace": "x", "filename": "f.txt", "size": 5}).json()
-    with db._connect() as conn:
-        conn.execute("UPDATE upload_jobs SET updated_at = ? WHERE id = ?", (main._iso_ago(hours=25), old["id"]))
+    with monkeypatch.context() as m:
+        m.setattr(db, "_now", lambda: main._iso_ago(hours=25))
+        db.update_job(old["id"])
     assert main._part_path(old["id"]).exists()
     client.post("/admin/api/jobs", headers=AUTH, json={"namespace": "x", "filename": "g.txt", "size": 5})
     assert db.get_job(old["id"]) is None and not main._part_path(old["id"]).exists()

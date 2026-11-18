@@ -37,6 +37,7 @@ POST /query ──► LangGraph:  START → condense → retrieve → generate �
 
     If your hadith records use other keys, add them to `CITATION_FIELDS` in [main.py](main.py). Fields that aren't citation fields are still passed to the model and returned under `metadata`.
 - A Pinecone API key and a Groq API key
+- A Redis database (e.g. a free Redis Cloud database) for the credentials, the list of uploaded files and upload progress
 
 Citations are built like this:
 
@@ -54,13 +55,13 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 
-cp .env.example .env        # then set ADMIN_TOKEN
+cp .env.example .env        # then set ADMIN_TOKEN and REDIS_URL
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 Behind a reverse proxy, add `--proxy-headers --forwarded-allow-ips=<the proxy's address>`, so the per-visitor question limit (see [Errors](#errors)) sees each visitor's address instead of the proxy's.
 
-Run the tests (Pinecone and Groq are faked, so they need no credentials or network):
+Run the tests (Pinecone, Groq and Redis are faked, so they need no credentials or network):
 
 ```bash
 pip install -r requirements-dev.txt
@@ -147,7 +148,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 #### Credentials
 
-The Groq API key and model, and the Pinecone API key, index name and embedding model, are kept only in the SQLite database (`data/deen.db`, or `DB_PATH`) and changed on the admin page. Leave a key blank to keep the current one. The models default to `openai/gpt-oss-120b` and `multilingual-e5-large`. If Groq retires a model (as it did `llama-3.3-70b-versatile`), questions fail with a 502 until another one is entered here; the admin page checks that the key can use it. Before anything is saved, the new values are tested:
+The Groq API key and model, and the Pinecone API key, index name and embedding model, are kept only in the Redis database (`REDIS_URL`) and changed on the admin page. Leave a key blank to keep the current one. The models default to `openai/gpt-oss-120b` and `multilingual-e5-large`. If Groq retires a model (as it did `llama-3.3-70b-versatile`), questions fail with a 502 until another one is entered here; the admin page checks that the key can use it. Before anything is saved, the new values are tested:
 
 - Groq: the key must be accepted and able to use the model.
 - Pinecone: the key must open the index, the index must be a standard (dense) index, and the embedding model must produce vectors of the index's dimension. Pinecone's newer "document" indexes embed text themselves and refuse the vectors Deen writes, so they're rejected with a message saying so; create a standard index with the model's dimension (1024 for `multilingual-e5-large`) and cosine metric.
@@ -156,7 +157,7 @@ Only the service whose settings changed is tested, so you can enter Groq before 
 
 **Moving from `.env`.** On the first start, when the database has no settings yet, any `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_EMBEDDING_MODEL`, `GROQ_API_KEY` and `GROQ_MODEL` in the environment are copied into it once, and the log says so. After that, those variables are ignored, so remove them from `.env`.
 
-The database stores the keys in plain text. Keep it out of version control (`data/` is in `.gitignore`), readable only by the server's user (it's created with owner-only permissions on Linux and macOS), and on storage that persists between deploys.
+The database stores the keys in plain text. Keep `REDIS_URL` secret (it contains the password), use a database only this app can reach, and use a `rediss://` (TLS) address if your host offers one. Every key starts with `deen:`, so the database can be shared with other apps.
 
 **Upload files.** Choose a text (namespace), or type a new name to create one, then pick one or more files of up to 200 MB each (.json up to 50 MB). Each file is split into passages, embedded with the configured model (`input_type="passage"`) and upserted into that namespace. New texts appear in the chat page's text list, and in its "All texts" search, within about a minute: the chat reuses Pinecone's index statistics for 60 seconds instead of fetching them for every question.
 
@@ -176,11 +177,11 @@ Records without `text` or `content` are skipped and counted in the upload result
 2. It sends the parts in order, showing the percentage. A part that fails because of the network is sent again; if the server already has it, the server says how much it has and the page carries on from there.
 3. Once all parts have arrived, the server processes the file in a background thread, and the page shows how many passages are stored so far. You can close the page: the job carries on, and the file appears in the list when it's done.
 
-Parts are kept in `data/upload-parts/` (next to the database) until the job ends. Job progress is kept in the database, so any worker process can take parts or report on a job. A job is processed by the process that started it; if that process stops, the job is reported as failed after 10 minutes without progress. Finished and abandoned jobs, and their parts, are removed after a day.
+Parts are kept in `data/upload-parts/` until the job ends. Job progress is kept in the database, so any worker process can take parts or report on a job. A job is processed by the process that started it; if that process stops, the job is reported as failed after 10 minutes without progress. Finished and abandoned jobs, and their parts, are removed after a day.
 
 Behind a reverse proxy, allow request bodies a little over 5 MB (for nginx, `client_max_body_size 6m;`). Mind the cost of very large files: embedding uses about one token per 3–4 characters of English, so a 200 MB file needs roughly 50–60 million tokens, far more than Pinecone's free Starter allowance of 5 million a month.
 
-**Delete files.** The page lists the files uploaded from it to the current index, and **Delete** removes a file's vectors from Pinecone. This list is kept in the same SQLite database, so it must persist between deploys. Texts indexed some other way are counted in the totals, but can't be deleted from the page.
+**Delete files.** The page lists the files uploaded from it to the current index, and **Delete** removes a file's vectors from Pinecone. This list is kept in the same Redis database, so that database must keep its data across restarts (turn on persistence if your host has it off). Texts indexed some other way are counted in the totals, but can't be deleted from the page.
 
 The admin endpoints live under `/admin/api/` and need an `Authorization: Bearer <ADMIN_TOKEN>` header. Besides the page's job endpoints (`POST /jobs`, `PUT /jobs/{id}/data?offset=…`, `POST /jobs/{id}/finish`, `GET /jobs/{id}`), `POST /files` (a form with `namespace` and `file`) and `POST /files/from-url` (JSON with `namespace` and `url`) upload a file of up to 20 MB in a single request, for scripts. They're left out of `/docs`. Keys are never sent back to the browser; the page shows only their first and last four characters.
 
@@ -189,7 +190,7 @@ The admin endpoints live under `/admin/api/` and need an `Authorization: Bearer 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `ADMIN_TOKEN` | yes, to manage credentials | unset (admin page off) | Token for the [admin page](#admin-page). At least 24 characters, or the admin page stays off; use a long random value |
-| `DB_PATH` | no | `data/deen.db` | SQLite database holding the credentials and the list of uploaded files |
+| `REDIS_URL` | yes | unset | Redis database holding the credentials, the list of uploaded files and upload progress, e.g. `redis://default:password@host:6379` |
 | `MIN_RELEVANCE_SCORE` | no | unset (keep all) | Drop matches scoring below this value (cosine/dotproduct indexes only) |
 | `LOG_LEVEL` | no | `INFO` | Python log level |
 
@@ -418,12 +419,11 @@ ingest.py          Splits uploaded files (.txt, .md, .pdf, .json, .jsonl, .csv) 
 static/index.html  Chatbot web page, served at /
 static/prayer-times.js  Azan time calculator and city list for the chat page (runs in the browser)
 static/admin.html  Admin page, served at /admin
-db.py              SQLite storage for the credentials and the list of uploaded files
-data/deen.db       The SQLite database: credentials and the list of uploaded files (ignored by git)
+db.py              Redis storage for the credentials, the list of uploaded files and upload progress
 static/fonts/      Self-hosted Source Serif 4, Noto Naskh Arabic and Noto Serif Bengali (woff2) with their licences, served under /static
 PRODUCT.md         Product decisions: users, positioning, Hanafi stance, languages
 requirements.txt   Dependencies
-requirements-dev.txt  Test dependencies (pytest)
+requirements-dev.txt  Test dependencies (pytest, fakeredis)
 tests/             Tests, with Pinecone and Groq faked: run `pytest`
 .env.example       Environment variable template
 ```
