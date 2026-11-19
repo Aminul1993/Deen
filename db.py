@@ -1,5 +1,6 @@
 """Redis storage: the Groq and Pinecone credentials, the files uploaded from the admin page, and
-the uploads still in progress (upload jobs), so any worker process can report on them.
+the uploads still in progress (upload jobs), so any worker process can report on them. (The PDFs
+kept as books are in Vercel Blob or on disk, not here: see storage.py.)
 
 REDIS_URL says where the database is, e.g. redis://default:password@host:port (rediss:// for
 TLS). Every key starts with "deen:", so the database can be shared with other apps:
@@ -25,7 +26,7 @@ JOBS_KEY = PREFIX + "jobs"
 
 JOB_STATES_FINISHED = ("done", "failed")
 
-JOB_FIELDS = ("id", "namespace", "filename", "source_url", "size", "received", "state", "passages",
+JOB_FIELDS = ("id", "namespace", "filename", "source_url", "language", "size", "received", "state", "passages",
               "result", "error", "created_at", "updated_at")
 
 _clients: Dict[str, redis.Redis] = {}
@@ -91,15 +92,20 @@ def get_upload(index_name: str, namespace: str, file_id: str) -> Optional[Dict[s
 
 
 def save_upload(index_name: str, namespace: str, file_id: str, filename: str,
-                passages: int, size_bytes: int, uploaded_at: Optional[str] = None) -> Dict[str, Any]:
+                passages: int, size_bytes: int, uploaded_at: Optional[str] = None,
+                language: Optional[str] = None, pages: Optional[int] = None, book: bool = False,
+                book_url: Optional[str] = None) -> Dict[str, Any]:
     """Record an uploaded file and return its row.
 
     uploaded_at orders a reader's passages. It defaults to now, and a file uploaded again keeps
-    the time of its first upload, so it doesn't jump to the end of the reader.
+    the time of its first upload, so it doesn't jump to the end of the reader. language is the
+    code chosen on upload, pages a PDF's page count, and book says its PDF is kept for the books page:
+    in Vercel Blob at book_url, or on the server's disk when book_url is None.
     """
     earlier = get_upload(index_name, namespace, file_id)
     row = {"file_id": file_id, "filename": filename, "namespace": namespace, "passages": passages,
-           "size_bytes": size_bytes, "uploaded_at": earlier["uploaded_at"] if earlier else uploaded_at or _now()}
+           "size_bytes": size_bytes, "language": language, "pages": pages, "book": book, "book_url": book_url,
+           "uploaded_at": earlier["uploaded_at"] if earlier else uploaded_at or _now()}
     client().hset(_uploads_key(index_name), _upload_field(namespace, file_id), json.dumps(row))
     return row
 
@@ -123,9 +129,11 @@ def _encode(fields: Dict[str, Any]) -> Dict[str, str]:
 
 
 def create_job(job_id: str, namespace: str, state: str, filename: Optional[str] = None,
-               source_url: Optional[str] = None, size: Optional[int] = None) -> Dict[str, Any]:
+               source_url: Optional[str] = None, size: Optional[int] = None,
+               language: Optional[str] = None) -> Dict[str, Any]:
     now = _now()
-    job = {"id": job_id, "namespace": namespace, "filename": filename, "source_url": source_url, "size": size,
+    job = {"id": job_id, "namespace": namespace, "filename": filename, "source_url": source_url,
+           "language": language, "size": size,
            "received": 0, "state": state, "passages": 0, "result": None, "error": None,
            "created_at": now, "updated_at": now}
     pipe = client().pipeline()  # MULTI/EXEC: both or neither

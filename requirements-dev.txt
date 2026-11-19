@@ -1,2 +1,3 @@
 pytest>=8.0
 fakeredis>=2.20.0
+quickjs>=1.19  # runs static/zakat.js in tests/test_zakat.py

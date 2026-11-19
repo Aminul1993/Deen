@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fffdf9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1f23" media="(prefers-color-scheme: dark)">
+<title data-i18n="books.title">Deen · Books</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232d5b60'/%3E%3Cpath d='M16 10.5c-2.2-1.6-5-2.2-8-2v13c3-.2 5.8.4 8 2 2.2-1.6 5-2.2 8-2v-13c-3-.2-5.8.4-8 2zm0 0v13' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
+<!-- Sets the page's language and direction from the reader's choice before anything is drawn. -->
+<script src="/static/i18n.js"></script>
+<style>
+  /* Fonts as on the chat page (SIL Open Font License, see /static/fonts/OFL-*.txt). */
+  @font-face {
+    font-family: "Source Serif 4";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/source-serif-4-latin.woff2) format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "Source Serif 4";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/source-serif-4-latin-ext.woff2) format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "Noto Naskh Arabic";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    size-adjust: 112%;
+    src: url(/static/fonts/noto-naskh-arabic.woff2) format("woff2");
+    unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+  }
+  @font-face {
+    font-family: "Noto Serif Bengali";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url(/static/fonts/noto-serif-bengali.woff2) format("woff2");
+    unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0, U+1CD2, U+1CD5-1CD6, U+1CD8, U+1CE1, U+1CEA, U+1CED, U+1CF2, U+1CF5-1CF7, U+200C-200D, U+20B9, U+25CC, U+A8F1;
+  }
+
+  /* Same tokens as the chat page (static/index.html). */
+  :root {
+    --bg: #f5f2ec;
+    --surface: #fffdf9;
+    --ink: #22252a;
+    --muted: #686c73;
+    --border: #e3ddd2;
+    --border-strong: #8e887d;
+    --accent: #2d5b60;
+    --accent-hover: #234a4e;
+    --on-accent: #ffffff;
+    --focus-ring: rgba(45, 91, 96, .18);
+    --selection: #cfe0df;
+    --badge-bg: #e6eeee;
+    --badge-ink: #2d5b60;
+    --error-bg: #fbeceb;
+    --error-ink: #8a2c24;
+    --error-border: #efc9c5;
+    --shadow: 0 1px 2px rgba(40, 30, 10, .05), 0 4px 14px rgba(40, 30, 10, .04);
+    --page-shadow: 0 1px 3px rgba(40, 30, 10, .12), 0 8px 24px rgba(40, 30, 10, .08);
+    --radius: 14px;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: "Source Serif 4", "Noto Naskh Arabic", "Noto Serif Bengali", Georgia, "Times New Roman", serif;
+    accent-color: var(--accent);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141619;
+      --surface: #1c1f23;
+      --ink: #e7e5e1;
+      --muted: #9a9fa6;
+      --border: #2c3036;
+      --border-strong: #666d77;
+      --accent: #7fb3b3;
+      --accent-hover: #96c4c4;
+      --on-accent: #0f1f1f;
+      --focus-ring: rgba(127, 179, 179, .22);
+      --selection: #2f5154;
+      --badge-bg: #213739;
+      --badge-ink: #a9d0cf;
+      --error-bg: #3a1f1d;
+      --error-ink: #f2b8b1;
+      --error-border: #5c302b;
+      --shadow: none;
+      --page-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button, select, input { font: inherit; color: inherit; }
+  button { touch-action: manipulation; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::selection { background: var(--selection); color: var(--ink); }
+  h1, h2, h3 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+  [hidden] { display: none !important; }
+  /* Arrows point the other way when the page reads right to left. */
+  :root[dir="rtl"] .flip-rtl { scale: -1 1; }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px 14px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin-inline-end: auto; }
+  .brand h1 { margin: 0; font: 600 22px/1.2 var(--serif); }
+  .brand span { color: var(--muted); font-size: 13px; }
+  .lang-pick { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .lang-pick svg { flex: none; }
+  .lang-pick select {
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
+  }
+  .ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--ink);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color .15s ease-out;
+  }
+  .ghost:hover:not(:disabled) { background: var(--bg); }
+  .ghost:active:not(:disabled) { transform: translateY(1px); }
+  .ghost:disabled { color: var(--muted); border-color: var(--border); cursor: default; }
+  .ghost svg { flex: none; }
+
+  /* Library */
+  .library { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; scrollbar-color: var(--border-strong) transparent; }
+  .page { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+  .page-head h2 { margin: 0 0 6px; font: 600 30px/1.2 var(--serif); }
+  .page-head p { margin: 0; max-width: 62ch; color: var(--muted); }
+  .shelf { margin-top: 32px; }
+  .shelf h3 {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 12px;
+    font: 600 12.5px/1.4 var(--sans);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  :root[lang="ar"] .shelf h3 { letter-spacing: 0; }
+  .shelf h3 .count { font-weight: 400; font-variant-numeric: tabular-nums; }
+  .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+  .book-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    height: 100%;
+    padding: 16px 18px;
+    color: var(--ink);
+    text-decoration: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    transition: border-color .15s ease-out;
+  }
+  .book-card:hover { border-color: var(--accent); }
+  .book-card:hover .book-title { color: var(--accent); }
+  .book-card:active { transform: translateY(1px); }
+  .book-title { font: 600 17px/1.4 var(--serif); overflow-wrap: anywhere; }
+  [lang="bn"].book-title { line-height: 1.6; }
+  [lang="ar"].book-title, [lang="ur"].book-title { line-height: 1.8; }
+  .book-meta { font-size: 13px; color: var(--muted); }
+  .book-progress { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 8px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar { flex: 1; height: 4px; overflow: hidden; background: var(--border); border-radius: 999px; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+  .library-status { margin: 32px 0 0; color: var(--muted); }
+  .library-status:empty { display: none; }
+  .notice { padding: 12px 14px; color: var(--error-ink); background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 10px; }
+  .notice p { margin: 0; }
+  .retry {
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    color: var(--error-ink);
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .retry:hover { background: var(--surface); }
+
+  /* Reader: a bar with the title and zoom, the page, and the page controls */
+  .viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .viewer-bar { display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .viewer-title { flex: 1; min-width: 0; }
+  .viewer-title strong, .viewer-title span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .viewer-title strong { font: 600 16px/1.35 var(--serif); }
+  .viewer-title span { font-size: 12.5px; color: var(--muted); }
+  .zoom { display: flex; align-items: center; gap: 4px; }
+  .tool {
+    display: inline-grid;
+    place-items: center;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 6px;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color .15s ease-out;
+  }
+  .tool:hover:not(:disabled) { background: var(--bg); }
+  .tool:disabled { color: var(--muted); border-color: var(--border); cursor: default; }
+  .tool.level { min-width: 58px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .resume-bar { padding: 7px 16px; text-align: center; background: var(--badge-bg); border-bottom: 1px solid var(--border); }
+  .resume-bar button {
+    padding: 2px 4px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--badge-ink);
+    background: none;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 16px;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  /* Grows with a zoomed-in page instead of overflowing to the left, so every part can be scrolled to. */
+  .page-holder { display: flex; justify-content: center; width: max-content; min-width: 100%; }
+  .page-holder canvas { display: block; background: #fff; box-shadow: var(--page-shadow); transition: opacity .15s ease-out; }
+  .stage.busy canvas { opacity: .55; transition-delay: .25s; } /* dim only if the next page is slow to draw */
+  .viewer-note { max-width: 440px; margin: 12vh auto 0; text-align: center; color: var(--muted); }
+  .viewer-note:empty { display: none; }
+  .viewer-note .notice { text-align: start; }
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .pager .ghost { font-size: 14px; padding: 7px 12px; }
+  .page-jump { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .page-jump input {
+    width: 5em;
+    padding: 5px 4px;
+    font-size: 14px;
+    text-align: center;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+  .page-jump input::-webkit-inner-spin-button, .page-jump input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+
+  @media (max-width: 600px) {
+    .topbar { padding: 10px 16px; }
+    .brand span { display: none; }
+    .lang-pick select, .page-jump input { font-size: 16px; } /* stops iOS zooming on focus */
+    .ghost { padding: 8px 10px; }
+    .page { padding: 22px 12px 48px; }
+    .page-head h2 { font-size: 26px; }
+    .book-grid { grid-template-columns: 1fr; }
+    .viewer-bar { gap: 6px; padding: 6px 8px; }
+    /* On a phone the back button shows only its arrow; its name stays for screen readers. */
+    .narrow-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .stage { padding: 8px; }
+    .pager { padding-inline: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ghost, .tool, .book-card, .page-holder canvas { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Deen</h1>
+      <span data-i18n="books.heading">Books</span>
+    </div>
+    <label class="lang-pick">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
+      <span class="sr-only" data-i18n="lang.label">Language</span>
+      <select id="language"></select>
+    </label>
+    <a class="ghost" href="/" data-i18n="books.openChat">Open chat</a>
+  </header>
+
+  <!-- The list of books -->
+  <main class="library" id="library">
+    <div class="page">
+      <div class="page-head">
+        <h2 data-i18n="books.heading">Books</h2>
+        <p data-i18n="books.intro">Read the books Deen's answers come from, one page at a time. Your place in each book is saved in this browser.</p>
+      </div>
+      <section class="shelf" id="continue" hidden aria-labelledby="continue-title">
+        <h3 id="continue-title" data-i18n="books.continue">Continue reading</h3>
+        <ul class="book-grid" id="continue-list"></ul>
+      </section>
+      <div id="shelves"></div>
+      <div class="library-status" id="library-status" role="status"></div>
+    </div>
+  </main>
+
+  <!-- One book, one page at a time -->
+  <section class="viewer" id="viewer" hidden aria-labelledby="book-title">
+    <div class="viewer-bar">
+      <button type="button" class="ghost" id="back">
+        <svg class="flip-rtl" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span class="narrow-sr" data-i18n="books.allBooks">All books</span>
+      </button>
+      <div class="viewer-title">
+        <strong id="book-title" dir="auto"></strong>
+        <span id="book-meta"></span>
+      </div>
+      <div class="zoom">
+        <button type="button" class="tool" id="zoom-out" aria-label="Zoom out" data-i18n-aria-label="books.zoomOut" data-i18n-title="books.zoomOut">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+        </button>
+        <button type="button" class="tool level" id="zoom-fit" data-i18n-title="books.fit"></button>
+        <button type="button" class="tool" id="zoom-in" aria-label="Zoom in" data-i18n-aria-label="books.zoomIn" data-i18n-title="books.zoomIn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+        </button>
+      </div>
+      <a class="tool" id="open-pdf" target="_blank" aria-label="Open PDF" data-i18n-aria-label="books.openPdf" data-i18n-title="books.openPdf">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+      </a>
+    </div>
+    <div class="resume-bar" id="resume-bar" hidden>
+      <button type="button" id="resume"></button>
+    </div>
+    <div class="stage" id="stage">
+      <div class="page-holder" id="page-holder"></div>
+      <div class="viewer-note" id="viewer-note" role="status"></div>
+    </div>
+    <nav class="pager" aria-label="Pages" data-i18n-aria-label="books.pager">
+      <button type="button" class="ghost" id="page-prev">
+        <svg class="flip-rtl" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span data-i18n="books.previous">Previous</span>
+      </button>
+      <label class="page-jump">
+        <input type="number" id="page-input" min="1" inputmode="numeric" aria-label="Page number" data-i18n-aria-label="books.pageNumber">
+        <span id="page-of"></span>
+      </label>
+      <button type="button" class="ghost" id="page-next">
+        <span data-i18n="books.next">Next</span>
+        <svg class="flip-rtl" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </nav>
+  </section>
+
+<script>
+(() => {
+  "use strict";
+
+  const I18n = window.DeenI18n; // static/i18n.js
+  const t = I18n.t;
+  const $ = (id) => document.getElementById(id);
+  const PDFJS = "/static/vendor/pdfjs/"; // pdf.js, kept in the app (see its README)
+  const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]; // 1 = the page fits the width, up to MAX_PAGE_WIDTH
+  const MAX_PAGE_WIDTH = 860; // CSS pixels: a page isn't drawn wider than this at 100%, so text stays a readable size
+  const MAX_CANVAS_PIXELS = 16777216; // the largest canvas iOS Safari draws (4096 × 4096)
+  const CONTINUE_LIMIT = 4; // books under "Continue reading"
+  const ZOOM_KEY = "deen-book-zoom";
+  const PROGRESS_PREFIX = "deen-book:"; // + "<text>/<book id>" -> {page, pages, at}
+
+  const stage = $("stage");
+  const holder = $("page-holder");
+  const note = $("viewer-note");
+  const pageInput = $("page-input");
+  let books = null; // from GET /books/list; null until loaded
+  let languages = {}; // code -> English name, from the server
+  let loadFailed = false;
+  let pdfjsLib = null;
+  const view = { book: null, task: null, doc: null, page: 1, pages: 0, zoom: savedZoom(), renderId: 0, renderTask: null, resumePage: null };
+
+  // ---------- helpers ----------
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  // Mirrors display_name() in main.py.
+  function prettyName(ns) {
+    if (!ns || ns === "__default__") return "Untitled text";
+    return ns.replace(/[_-]/g, " ").trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function languageLabel(code) {
+    return code ? I18n.languageName(code, languages[code] || code) : t("books.noLanguage");
+  }
+
+  function notice(message, retry) {
+    const box = el("div", "notice");
+    box.append(el("p", null, message));
+    if (retry) {
+      const button = el("button", "retry", t("books.retry"));
+      button.type = "button";
+      button.addEventListener("click", retry);
+      box.append(button);
+    }
+    return box;
+  }
+
+  // ---------- reading progress, kept in this browser ----------
+
+  const progressKey = (book) => PROGRESS_PREFIX + book.text + "/" + book.id;
+
+  function readProgress(book) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(progressKey(book)) || "null");
+      if (saved && Number.isInteger(saved.page) && saved.page >= 1) return saved;
+    } catch (_) { /* storage blocked or damaged */ }
+    return null;
+  }
+
+  function saveProgress(book, page, pages) {
+    try { localStorage.setItem(progressKey(book), JSON.stringify({ page, pages, at: Date.now() })); } catch (_) { /* storage blocked */ }
+  }
+
+  function savedZoom() {
+    try {
+      const zoom = Number(localStorage.getItem(ZOOM_KEY));
+      if (ZOOMS.includes(zoom)) return zoom;
+    } catch (_) { /* storage blocked */ }
+    return 1;
+  }
+
+  // ---------- the list of books ----------
+
+  async function loadBooks() {
+    try {
+      const res = await fetch("/books/list");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      books = data.books || [];
+      languages = data.languages || {};
+      loadFailed = false;
+    } catch (err) {
+      console.warn("Could not load the books:", err);
+      books = null;
+      loadFailed = true;
+    }
+  }
+
+  function bookCard(book) {
+    const item = el("li");
+    const card = el("a", "book-card");
+    card.href = book.url;
+    card.addEventListener("click", (event) => {
+      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; // a new tab or window
+      event.preventDefault();
+      history.pushState({ fromLibrary: true }, "", book.url);
+      openBook(book, null);
+    });
+    const title = el("span", "book-title", book.title);
+    title.dir = "auto";
+    if (book.language) title.lang = book.language;
+    const meta = [languageLabel(book.language)];
+    if (book.pages) meta.push(t("books.pages", { count: book.pages }));
+    meta.push(prettyName(book.text));
+    card.append(title, el("span", "book-meta", meta.join(" · ")));
+
+    const progress = readProgress(book);
+    const pages = book.pages || (progress && progress.pages);
+    if (progress && pages) {
+      const row = el("span", "book-progress");
+      const bar = el("span", "bar");
+      bar.setAttribute("aria-hidden", "true");
+      const fill = el("i");
+      fill.style.inlineSize = Math.min(100, (progress.page / pages) * 100) + "%";
+      bar.append(fill);
+      row.append(bar, el("span", null, t("books.pageOf", { page: Math.min(progress.page, pages), pages })));
+      card.append(row);
+    }
+    item.append(card);
+    return item;
+  }
+
+  function shelf(heading, list) {
+    const section = el("section", "shelf");
+    const title = el("h3", null, heading + " ");
+    title.append(el("span", "count", I18n.number(list.length)));
+    const grid = el("ul", "book-grid");
+    grid.append(...list.map(bookCard));
+    section.append(title, grid);
+    return section;
+  }
+
+  function renderLibrary() {
+    const status = $("library-status");
+    const shelves = $("shelves");
+    shelves.replaceChildren();
+    $("continue").hidden = true;
+    if (loadFailed) {
+      status.replaceChildren(notice(t("books.loadFailed"), () => {
+        loadFailed = false;
+        renderLibrary();
+        loadBooks().then(route);
+      }));
+      return;
+    }
+    if (!books) { status.textContent = t("books.loading"); return; }
+    if (!books.length) { status.textContent = t("books.empty"); return; }
+    status.replaceChildren();
+
+    // Books with a saved place, most recently read first.
+    const started = books
+      .map((book) => [book, readProgress(book)])
+      .filter(([, progress]) => progress)
+      .sort((a, b) => (b[1].at || 0) - (a[1].at || 0))
+      .slice(0, CONTINUE_LIMIT);
+    $("continue").hidden = !started.length;
+    $("continue-list").replaceChildren(...started.map(([book]) => bookCard(book)));
+
+    // One shelf per language: the page's language first, then the others by name, then books without one.
+    const preferred = I18n.lang;
+    const collator = new Intl.Collator(preferred);
+    const byLanguage = new Map();
+    for (const book of books) {
+      const code = book.language || "";
+      if (!byLanguage.has(code)) byLanguage.set(code, []);
+      byLanguage.get(code).push(book);
+    }
+    const rank = (code) => (code === preferred ? 0 : code ? 1 : 2);
+    const codes = [...byLanguage.keys()].sort((a, b) => rank(a) - rank(b) || collator.compare(languageLabel(a), languageLabel(b)));
+    for (const code of codes) {
+      const list = byLanguage.get(code).sort((a, b) => collator.compare(a.title, b.title));
+      shelves.append(shelf(languageLabel(code), list));
+    }
+  }
+
+  // ---------- reading a book ----------
+
+  async function pdfjs() {
+    if (!pdfjsLib) {
+      const lib = await import(PDFJS + "pdf.min.mjs");
+      lib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.mjs";
+      pdfjsLib = lib;
+    }
+    return pdfjsLib;
+  }
+
+  function showView(name) {
+    $("library").hidden = name !== "library";
+    $("viewer").hidden = name !== "viewer";
+  }
+
+  function setNote(content) {
+    if (typeof content === "string") note.textContent = content;
+    else note.replaceChildren(...(content ? [content] : []));
+  }
+
+  function closeBook() {
+    view.renderId++; // any page still being drawn is dropped
+    if (view.renderTask) view.renderTask.cancel();
+    if (view.task) view.task.destroy().catch(() => {});
+    Object.assign(view, { book: null, task: null, doc: null, renderTask: null, resumePage: null, pages: 0 });
+    holder.replaceChildren();
+    setNote("");
+  }
+
+  function labelViewer() {
+    const book = view.book;
+    const title = $("book-title");
+    title.textContent = book ? book.title : "";
+    title.lang = (book && book.language) || "";
+    const meta = [];
+    if (book) {
+      meta.push(languageLabel(book.language));
+      if (view.pages) meta.push(t("books.pages", { count: view.pages }));
+      meta.push(prettyName(book.text));
+    }
+    $("book-meta").textContent = meta.join(" · ");
+    const open = $("open-pdf");
+    open.hidden = !book;
+    if (book) open.href = book.pdf;
+    document.title = book ? book.title + " · Deen" : t("books.title");
+  }
+
+  function updatePager() {
+    const ready = !!view.doc;
+    pageInput.disabled = !ready;
+    pageInput.max = String(view.pages || 1);
+    pageInput.value = ready ? String(view.page) : "";
+    $("page-of").textContent = view.pages ? t("books.of", { pages: view.pages }) : "";
+    $("page-prev").disabled = !ready || view.page <= 1;
+    $("page-next").disabled = !ready || view.page >= view.pages;
+  }
+
+  function updateZoom() {
+    const fit = $("zoom-fit");
+    fit.textContent = I18n.number(view.zoom, { style: "percent" });
+    fit.setAttribute("aria-label", t("books.fit") + " (" + fit.textContent + ")");
+    $("zoom-out").disabled = view.zoom <= ZOOMS[0];
+    $("zoom-in").disabled = view.zoom >= ZOOMS[ZOOMS.length - 1];
+  }
+
+  function updateResume() {
+    $("resume-bar").hidden = !view.resumePage;
+    if (view.resumePage) $("resume").textContent = t("books.resume", { page: view.resumePage });
+  }
+
+  // page: the page to open at, from the address (a link from an answer's sources), or null for the saved place.
+  async function openBook(book, page) {
+    closeBook();
+    view.book = book;
+    view.pages = book.pages || 0;
+    showView("viewer");
+    labelViewer();
+    const saved = readProgress(book);
+    const start = page || (saved && saved.page) || 1;
+    // Opening a cited page doesn't move your place in the book; offer to go back to it instead.
+    view.resumePage = page && saved && saved.page !== page ? saved.page : null;
+    view.page = start;
+    updatePager();
+    updateResume();
+    setNote(t("books.opening"));
+    try {
+      const lib = await pdfjs();
+      if (view.book !== book) return;
+      // disableAutoFetch: download only the parts of the PDF the pages shown need (the server answers Range requests).
+      view.task = lib.getDocument({ url: book.pdf, wasmUrl: PDFJS + "wasm/", disableAutoFetch: true, isEvalSupported: false });
+      const doc = await view.task.promise;
+      if (view.book !== book) return;
+      view.doc = doc;
+      view.pages = doc.numPages;
+      labelViewer();
+      await goTo(Math.min(start, doc.numPages), { initial: true, save: !view.resumePage });
+    } catch (err) {
+      if (view.book !== book) return; // closed or replaced while opening
+      console.warn("Could not open the book:", err);
+      setNote(err && err.missing ? notice(t("books.missing")) : notice(t("books.openFailed"), () => openBook(book, page)));
+    }
+  }
+
+  async function goTo(number, { initial = false, save = true } = {}) {
+    if (!view.doc) return;
+    number = Math.min(Math.max(1, number), view.pages);
+    if (!initial && number === view.page) return updatePager();
+    view.page = number;
+    if (!initial) view.resumePage = null; // turning a page means this is where you're reading now
+    updatePager();
+    updateResume();
+    history.replaceState(history.state, "", view.book.url + "&page=" + number);
+    if (save) saveProgress(view.book, number, view.pages);
+    await render(true);
+    if (number < view.pages) view.doc.getPage(number + 1).catch(() => {}); // fetch the next page's data early
+  }
+
+  // Draw the current page into a new canvas, then swap it in, so the old page stays until the new one is ready.
+  async function render(toTop) {
+    const id = ++view.renderId;
+    const { doc, page: number } = view;
+    stage.classList.add("busy");
+    try {
+      const page = await doc.getPage(number);
+      if (id !== view.renderId) return;
+      const padding = parseFloat(getComputedStyle(stage).paddingLeft) || 0;
+      const available = Math.max(160, stage.clientWidth - 2 * padding);
+      const width = page.getViewport({ scale: 1 }).width;
+      const viewport = page.getViewport({ scale: (Math.min(available, MAX_PAGE_WIDTH) / width) * view.zoom });
+      let ratio = window.devicePixelRatio || 1; // sharp on high-density screens
+      const area = viewport.width * viewport.height;
+      if (area * ratio * ratio > MAX_CANVAS_PIXELS) ratio = Math.sqrt(MAX_CANVAS_PIXELS / area);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.floor(viewport.width * ratio);
+      canvas.height = Math.floor(viewport.height * ratio);
+      canvas.style.width = Math.floor(viewport.width) + "px";
+      canvas.style.height = Math.floor(viewport.height) + "px";
+      canvas.setAttribute("role", "img");
+      canvas.setAttribute("aria-label", t("books.pageOf", { page: number, pages: view.pages }));
+      if (view.renderTask) view.renderTask.cancel();
+      view.renderTask = page.render({
+        canvasContext: canvas.getContext("2d"),
+        viewport,
+        transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0],
+      });
+      await view.renderTask.promise;
+      if (id !== view.renderId) return;
+      holder.replaceChildren(canvas);
+      setNote("");
+      if (toTop) stage.scrollTop = 0;
+    } catch (err) {
+      if (id !== view.renderId || (err && err.name === "RenderingCancelledException")) return;
+      console.warn("Could not draw the page:", err);
+      holder.replaceChildren();
+      setNote(notice(t("books.openFailed"), () => render(true)));
+    } finally {
+      if (id === view.renderId) stage.classList.remove("busy");
+    }
+  }
+
+  function setZoom(zoom) {
+    view.zoom = zoom;
+    try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch (_) { /* storage blocked */ }
+    updateZoom();
+    if (view.doc) render(false);
+  }
+
+  function showMissing() {
+    closeBook();
+    showView("viewer");
+    labelViewer();
+    updatePager();
+    updateResume();
+    setNote(notice(t("books.missing")));
+  }
+
+  // ---------- the address: /books, or /books?text=…&book=…[&page=…] ----------
+
+  function route() {
+    const params = new URLSearchParams(location.search);
+    const id = params.get("book");
+    const text = params.get("text");
+    if (id && text && books) {
+      const book = books.find((b) => b.id === id && b.text === text);
+      const page = parseInt(params.get("page"), 10);
+      if (book) openBook(book, page >= 1 ? page : null);
+      else showMissing();
+      return;
+    }
+    closeBook();
+    showView("library");
+    labelViewer();
+    renderLibrary();
+  }
+
+  window.addEventListener("popstate", route);
+
+  // ---------- controls ----------
+
+  $("back").addEventListener("click", () => {
+    if (history.state && history.state.fromLibrary) {
+      history.back(); // to the list, where the reader came from
+    } else {
+      history.pushState(null, "", "/books");
+      route();
+    }
+  });
+  $("page-prev").addEventListener("click", () => goTo(view.page - 1));
+  $("page-next").addEventListener("click", () => goTo(view.page + 1));
+  pageInput.addEventListener("change", () => {
+    const number = parseInt(pageInput.value, 10);
+    if (number >= 1 && number <= view.pages) goTo(number);
+    else updatePager();
+  });
+  $("resume").addEventListener("click", () => goTo(view.resumePage));
+  $("zoom-in").addEventListener("click", () => setZoom(ZOOMS.find((z) => z > view.zoom) || view.zoom));
+  $("zoom-out").addEventListener("click", () => setZoom([...ZOOMS].reverse().find((z) => z < view.zoom) || view.zoom));
+  $("zoom-fit").addEventListener("click", () => setZoom(1));
+
+  // The arrow towards the Next button turns forward: right, or left when the page reads right to left.
+  document.addEventListener("keydown", (event) => {
+    if ($("viewer").hidden || !view.doc || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName)) return;
+    const forward = I18n.dir === "rtl" ? "ArrowLeft" : "ArrowRight";
+    const back = I18n.dir === "rtl" ? "ArrowRight" : "ArrowLeft";
+    if (event.key === forward) { event.preventDefault(); goTo(view.page + 1); }
+    if (event.key === back) { event.preventDefault(); goTo(view.page - 1); }
+  });
+
+  // Swipe to turn the page, like paper: towards the Previous button to go forward. Not while zoomed in
+  // wider than the screen, where a swipe scrolls the page instead.
+  let touch = null;
+  stage.addEventListener("touchstart", (event) => {
+    touch = event.touches.length === 1 ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : null;
+  }, { passive: true });
+  stage.addEventListener("touchend", (event) => {
+    if (!touch || !view.doc) return;
+    const dx = event.changedTouches[0].clientX - touch.x;
+    const dy = event.changedTouches[0].clientY - touch.y;
+    touch = null;
+    if (stage.scrollWidth > stage.clientWidth + 1) return;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const forward = I18n.dir === "rtl" ? dx > 0 : dx < 0;
+    goTo(view.page + (forward ? 1 : -1));
+  }, { passive: true });
+
+  // Redraw at the new width when the window is resized or a phone is turned.
+  let lastWidth = 0;
+  let resizeTimer = 0;
+  new ResizeObserver(() => {
+    if (Math.abs(stage.clientWidth - lastWidth) < 2) return;
+    lastWidth = stage.clientWidth;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (view.doc) render(false); }, 150);
+  }).observe(stage);
+
+  // ---------- start ----------
+
+  I18n.apply();
+  I18n.bindSelect($("language"));
+  I18n.onChange(() => {
+    renderLibrary(); // the new language's books come first
+    if (view.book) {
+      labelViewer();
+      updatePager();
+      updateResume();
+      const canvas = holder.querySelector("canvas");
+      if (canvas) canvas.setAttribute("aria-label", t("books.pageOf", { page: view.page, pages: view.pages }));
+    } else if (!$("viewer").hidden) {
+      setNote(notice(t("books.missing")));
+    }
+    updateZoom();
+  });
+  updateZoom();
+  renderLibrary();
+  loadBooks().then(route);
+})();
+</script>
+</body>
+</html>

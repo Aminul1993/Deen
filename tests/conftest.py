@@ -22,11 +22,37 @@ os.environ.update({
     "ADMIN_TOKEN": ADMIN_TOKEN,
     "PINECONE_API_KEY": "", "PINECONE_INDEX_NAME": "", "PINECONE_EMBEDDING_MODEL": "",
     "GROQ_API_KEY": "", "GROQ_MODEL": "", "MIN_RELEVANCE_SCORE": "",
+    # Books stay on disk unless a test sets up a fake Blob store: the real store in .env is never used.
+    "BLOB_READ_WRITE_TOKEN": "", "VERCEL_BLOB_READ_WRITE_TOKEN": "", "BLOB_STORE_ID": "", "VERCEL_OIDC_TOKEN": "",
+    "BLOB_ACCESS": "",
 })
 
 import main  # noqa: E402
 
 DIM = 4  # vector size of the fake embedding model
+
+
+def tiny_pdf(page_texts):
+    """A minimal valid PDF with one line of Helvetica text per page."""
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>"]
+    kids = " ".join(f"{4 + 2 * i} 0 R" for i in range(len(page_texts)))
+    objects.append(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_texts)} >>".encode())
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    for i, text in enumerate(page_texts):
+        stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
+        objects.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                       f"/Resources << /Font << /F1 3 0 R >> >> /Contents {5 + 2 * i} 0 R >>".encode())
+        objects.append(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream")
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    return bytes(out)
 
 
 class RateLimited(Exception):
@@ -62,6 +88,12 @@ class FakeIndex:
         for v in vectors:
             assert set(v["metadata"]) >= {"text", "source_file"}
             self.vectors[(namespace, v["id"])] = v
+
+    def query(self, vector, top_k, namespace, include_metadata, include_values):
+        """Every passage in the namespace matches, in the order stored."""
+        matches = [{"id": vid, "score": 0.9, "metadata": record["metadata"]}
+                   for (ns, vid), record in self.vectors.items() if ns == namespace]
+        return {"matches": matches[:top_k]}
 
     def fetch(self, ids, namespace):
         return {"vectors": {i: {"id": i, "metadata": self.vectors[(namespace, i)]["metadata"]}
@@ -131,6 +163,7 @@ def isolated(tmp_path, monkeypatch):
     redis = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(main.db, "client", lambda: redis)
     monkeypatch.setattr(main, "PARTS_DIR", tmp_path / "upload-parts")
+    monkeypatch.setattr(main, "BOOKS_DIR", tmp_path / "books")
     monkeypatch.setattr(main.time, "sleep", lambda seconds: None)
     main.set_resources(None)
     main._stats_cache = (None, 0.0, {})
@@ -156,6 +189,7 @@ def web_server(monkeypatch):
         "/duas.json": (200, "text/plain", json.dumps([{"text": "A dua from the web."}]).encode()),
         "/page": (200, "text/html", b"<html>hi</html>"),
         "/big.txt": (200, "text/plain", b"x" * 2000),
+        "/files/Fazail_Amal.pdf": (200, "application/pdf", tiny_pdf(["Virtues of good deeds."])),
     }
 
     class Handler(BaseHTTPRequestHandler):

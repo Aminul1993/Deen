@@ -26,7 +26,7 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import PurePath
-from typing import Any, BinaryIO, Dict, Iterable, Iterator, List, Tuple, Union
+from typing import Any, BinaryIO, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 from pypdf import PdfReader
 
@@ -110,6 +110,7 @@ class FileReader:
             )
         self.stream = stream
         self.skipped_records = 0
+        self.page_count: Optional[int] = None  # a PDF's number of pages, once reading has started
 
     def __iter__(self) -> Iterator[Passage]:
         count = 0
@@ -128,7 +129,9 @@ class FileReader:
             for block in _text_blocks(_lines(self.stream)):
                 yield from (Passage(chunk, {}) for chunk in chunk_text(block))
         elif self.extension == ".pdf":
-            yield from _pdf_passages(self.stream)
+            pages = _pdf_pages(self.stream)
+            self.page_count = len(pages)
+            yield from _pdf_passages(pages)
         elif self.extension == ".json":
             yield from self._records(_json_records(self.stream.read()))
         elif self.extension == ".jsonl":
@@ -232,13 +235,17 @@ def _text_blocks(lines: Iterable[str]) -> Iterator[str]:
         yield "".join(block)
 
 
-def _pdf_passages(stream: BinaryIO) -> Iterator[Passage]:
+def _pdf_pages(stream: BinaryIO) -> Sequence[Any]:
     try:
         pages = PdfReader(stream).pages
-        count = len(pages)
+        len(pages)  # reads the page tree, so a damaged file fails here
     except Exception as exc:  # pypdf raises many types for damaged or encrypted files
         raise IngestError(_BAD_PDF) from exc
-    for number in range(count):
+    return pages
+
+
+def _pdf_passages(pages: Sequence[Any]) -> Iterator[Passage]:
+    for number in range(len(pages)):
         try:
             page_text = pages[number].extract_text() or ""
         except Exception as exc:

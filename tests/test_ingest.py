@@ -1,33 +1,12 @@
 """Splitting uploaded files into passages (ingest.py)."""
 
+import io
 import json
 
 import pytest
 
 import ingest
-
-
-def tiny_pdf(page_texts):
-    """A minimal valid PDF with one line of Helvetica text per page."""
-    objects = [b"<< /Type /Catalog /Pages 2 0 R >>"]
-    kids = " ".join(f"{4 + 2 * i} 0 R" for i in range(len(page_texts)))
-    objects.append(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_texts)} >>".encode())
-    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
-    for i, text in enumerate(page_texts):
-        stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
-        objects.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-                       f"/Resources << /Font << /F1 3 0 R >> >> /Contents {5 + 2 * i} 0 R >>".encode())
-        objects.append(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream")
-    out = bytearray(b"%PDF-1.4\n")
-    offsets = []
-    for number, body in enumerate(objects, start=1):
-        offsets.append(len(out))
-        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
-    xref = len(out)
-    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
-    out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
-    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
-    return bytes(out)
+from conftest import tiny_pdf
 
 
 def test_chunks_end_at_sentences_and_overlap():
@@ -73,9 +52,14 @@ def test_text_jsonl_and_csv():
 
 
 def test_pdf_pages_keep_their_numbers():
-    parsed = ingest.parse_file("book.PDF", tiny_pdf(["Page one about patience.", "Page two about charity."]))
+    data = tiny_pdf(["Page one about patience.", "Page two about charity."])
+    parsed = ingest.parse_file("book.PDF", data)
     assert [p.metadata for p in parsed.passages] == [{"page": 1}, {"page": 2}]
     assert "patience" in parsed.passages[0].text
+    reader = ingest.FileReader("book.pdf", io.BytesIO(data), len(data))
+    assert reader.page_count is None
+    list(reader)
+    assert reader.page_count == 2
 
 
 @pytest.mark.parametrize("name, data, message", [

@@ -6,9 +6,11 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fffdf9" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1c1f23" media="(prefers-color-scheme: dark)">
-<title>Deen · Quran &amp; Hadith Q&amp;A</title>
+<title data-i18n="chat.title">Deen · Quran &amp; Hadith Q&amp;A</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232d5b60'/%3E%3Cpath d='M16 10.5c-2.2-1.6-5-2.2-8-2v13c3-.2 5.8.4 8 2 2.2-1.6 5-2.2 8-2v-13c-3-.2-5.8.4-8 2zm0 0v13' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preload" href="/static/fonts/source-serif-4-latin.woff2" as="font" type="font/woff2" crossorigin>
+<!-- Sets the page's language and direction from the reader's choice before anything is drawn. -->
+<script src="/static/i18n.js"></script>
 <style>
   /* Source Serif 4 (SIL Open Font License, see /static/fonts/OFL.txt), weights 400–700. */
   @font-face {
@@ -144,7 +146,7 @@
     background: var(--surface);
     border-bottom: 1px solid var(--border);
   }
-  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin-right: auto; }
+  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin-inline-end: auto; }
   .brand h1 { margin: 0; font: 600 22px/1.2 var(--serif); }
   .brand span { color: var(--muted); font-size: 13px; }
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
@@ -159,6 +161,18 @@
     max-width: 220px;
     cursor: pointer;
   }
+  /* Language: a globe and a select, kept narrow so it fits beside the brand on a phone. */
+  .lang-pick { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .lang-pick svg { flex: none; }
+  .lang-pick select {
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
+  }
   .ghost {
     font-size: 13px;
     background: transparent;
@@ -166,9 +180,11 @@
     border-radius: 8px;
     padding: 6px 12px;
     color: var(--ink);
+    text-decoration: none;
     cursor: pointer;
     transition: background-color .15s ease-out;
   }
+  a.ghost { display: inline-flex; align-items: center; }
   .ghost:hover:not(:disabled) { background: var(--bg); }
   .ghost:active:not(:disabled) { transform: translateY(1px); }
   .ghost:disabled { color: var(--muted); border-color: var(--border); cursor: default; }
@@ -198,18 +214,21 @@
     padding: 10px 14px;
     background: var(--user-bg);
     color: var(--user-ink);
-    border-radius: var(--radius) var(--radius) 4px var(--radius);
+    border-radius: var(--radius);
+    border-end-end-radius: 4px; /* the corner nearest the composer, on the left in Arabic */
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .msg.user .bubble::selection { background: var(--user-ink); color: var(--user-bg); }
   .msg.user .scope { font-size: 12px; color: var(--muted); margin: 5px 4px 0; }
   .msg.bot .label { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 4px 6px; }
+  :root[lang="ar"] .msg.bot .label { letter-spacing: 0; } /* spacing would break Arabic letters apart */
   .msg.bot .bubble {
     padding: 18px 22px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 4px var(--radius) var(--radius) var(--radius);
+    border-radius: var(--radius);
+    border-start-start-radius: 4px;
     box-shadow: var(--shadow);
     overflow-wrap: break-word;
   }
@@ -249,7 +268,8 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 2px 4px 2px 0;
+    padding-block: 2px;
+    padding-inline: 0 4px;
     cursor: pointer;
     font-size: 13px;
     font-weight: 600;
@@ -261,13 +281,27 @@
   .sources summary:hover { text-decoration: underline; text-underline-offset: 3px; }
   .chev { flex: none; transition: transform .2s cubic-bezier(.16, 1, .3, 1); }
   .sources[open] .chev { transform: rotate(90deg); }
-  .sources ol { margin: 12px 0 0; padding-left: 1.6em; display: flex; flex-direction: column; gap: 14px; }
+  /* Arrows point the other way in Arabic. scale applies after transform, so an open chevron still points down. */
+  :root[dir="rtl"] .chev, :root[dir="rtl"] .flip-rtl { scale: -1 1; }
+  .sources ol { margin: 12px 0 0; padding-inline-start: 1.6em; display: flex; flex-direction: column; gap: 14px; }
   .sources li::marker { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
   .source-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 14px; }
   .source-ref { font-weight: 600; }
   .badge { background: var(--badge-bg); color: var(--badge-ink); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
-  .score { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
   .excerpt { margin: 4px 0 0; color: var(--muted); font: 15px/1.6 var(--serif); }
+  .book-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    border-radius: 4px;
+  }
+  .book-link svg { flex: none; }
+  .book-link:hover span { text-decoration: underline; text-underline-offset: 3px; }
 
   .typing { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
   .dots { display: inline-flex; gap: 4px; }
@@ -283,7 +317,7 @@
   .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
   .chip {
     font-size: 14px;
-    text-align: left;
+    text-align: start;
     padding: 8px 14px;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -306,7 +340,8 @@
     display: flex;
     align-items: flex-end;
     gap: 8px;
-    padding: 7px 7px 7px 16px;
+    padding: 7px;
+    padding-inline-start: 16px;
     background: var(--surface);
     border: 1px solid var(--border-strong);
     border-radius: 16px;
@@ -374,9 +409,9 @@
   .sheet[open] { display: flex; flex-direction: column; }
   .sheet::backdrop { background: rgba(20, 22, 25, .45); }
   @media (prefers-color-scheme: dark) { .sheet::backdrop { background: rgba(0, 0, 0, .6); } }
-  .sheet-head { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 22px; border-bottom: 1px solid var(--border); }
+  .sheet-head { display: flex; align-items: center; gap: 12px; padding: 12px; padding-inline-start: 22px; border-bottom: 1px solid var(--border); }
   .sheet-head h2 { flex: none; margin: 0; font: 600 20px/1.2 var(--serif); }
-  .sheet-head .icon-btn { margin-left: auto; }
+  .sheet-head .icon-btn { margin-inline-start: auto; }
   .icon-btn {
     display: grid;
     place-items: center;
@@ -442,7 +477,7 @@
     min-height: 36px;
     padding: 6px 0;
     font-size: 13px;
-    text-align: left;
+    text-align: start;
     color: var(--ink);
     background: transparent;
     border: 0;
@@ -456,7 +491,7 @@
   .pb-place { color: var(--muted); }
   .pb-next strong { font-weight: 650; font-variant-numeric: tabular-nums; }
   .pb-in { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .prayer-open .chev { margin-left: auto; color: var(--muted); }
+  .prayer-open .chev { margin-inline-start: auto; color: var(--muted); }
 
   .prayer-place { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
   .pt-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; font-size: 13px; font-weight: 600; }
@@ -497,20 +532,73 @@
   .pt-settings label { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; font-weight: 600; font-size: 13px; }
   .pt-note { margin: 18px 0 0; font-size: 12.5px; color: var(--muted); }
 
+  /* Zakat calculator: a form in a dialog, with the amount due kept in view at the bottom */
+  .zk-intro { margin: 0 0 18px; color: var(--muted); }
+  .zk-group { min-width: 0; margin: 0 0 22px; padding: 0; border: 0; }
+  .zk-group legend, .zk-result h3 { padding: 0; margin: 0 0 10px; font: 600 12.5px/1.4 var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  :root[lang="ar"] .zk-group legend, :root[lang="ar"] .zk-result h3 { letter-spacing: 0; }
+  .zk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; align-items: start; }
+  .zk-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .zk-field label, .zk-field > span { font-size: 13px; font-weight: 600; }
+  .zk-field input, .zk-field select {
+    width: 100%;
+    font: inherit;
+    font-size: 15px;
+    padding: 8px 10px;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .zk-field select { cursor: pointer; }
+  .zk-field input:focus, .zk-field select:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+  .zk-field input[aria-invalid="true"] { border-color: var(--error-ink); }
+  .zk-help { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .zk-group > .zk-help { margin-top: 10px; }
+  .zk-standard { margin-bottom: 22px; }
+  .zk-result { margin: 0 0 18px; padding: 16px 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; }
+  .zk-rows { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 0; font-variant-numeric: tabular-nums; }
+  .zk-rows dt { color: var(--muted); }
+  .zk-rows dd { margin: 0; text-align: end; font-weight: 600; }
+  .zk-sub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+  .zk-basis { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+  .zk-total { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-weight: 600; }
+  .zk-total strong { font: 600 22px/1.2 var(--serif); color: var(--accent); font-variant-numeric: tabular-nums; }
+  .zk-message { margin: 0; color: var(--muted); }
+  .zk-message.error { color: var(--error-ink); }
+  .zk-notes { margin: 0 0 16px; padding-inline-start: 1.2em; font-size: 12.5px; color: var(--muted); }
+  .zk-notes li + li { margin-top: 4px; }
+  .zk-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+  }
+  .zk-due { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; margin: 0; font-size: 12.5px; color: var(--muted); }
+  .zk-due span { white-space: nowrap; }
+  .zk-due strong { font: 600 18px/1.3 var(--serif); color: var(--ink); font-variant-numeric: tabular-nums; }
+  /* On a narrow screen the button's label wraps, rather than squeezing the amount. */
+  .zk-footer .ghost { flex: 0 1 auto; max-width: 60%; font-size: 14px; line-height: 1.3; padding: 7px 12px; text-align: center; }
+
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 
   @media (max-width: 960px) {
-    .topbar { display: grid; grid-template-columns: 1fr auto; }
+    .topbar { display: grid; grid-template-columns: 1fr auto auto; }
     .controls { grid-column: 1 / -1; grid-row: 2; }
   }
   @media (max-width: 600px) {
-    .topbar { padding: 10px 16px; }
+    /* Brand and language; then the text and passages; then the buttons, wrapping if they must. */
+    .topbar { padding: 10px 16px; grid-template-columns: 1fr auto; }
     .brand span { display: none; }
     .controls { grid-column: 1 / -1; grid-row: 2; flex-wrap: nowrap; gap: 12px; }
-    .field select { font-size: 16px; padding: 6px 6px; }
+    .top-actions { grid-column: 1 / -1; grid-row: 3; flex-wrap: wrap; }
+    .field select, .lang-pick select { font-size: 16px; padding: 6px 6px; }
     .field:first-child { flex: 1; min-width: 0; }
     .field:first-child select { flex: 1; min-width: 0; max-width: none; }
-    .ghost { padding: 8px 12px; }
+    .ghost { padding: 8px 10px; }
     .thread { padding: 20px 12px 28px; }
     .msg.user .bubble { max-width: 92%; }
     .msg.bot .bubble { padding: 14px 16px; }
@@ -522,8 +610,10 @@
     .hint { justify-content: center; text-align: center; }
     .prayer-bar { padding: 0 16px; }
     .pt-field select, .pt-settings select { font-size: 16px; }
+    .zk-grid { grid-template-columns: 1fr; }
+    .zk-field input, .zk-field select { font-size: 16px; }
     .sheet { width: 100vw; height: 100dvh; max-height: none; margin: 0; border: 0; border-radius: 0; }
-    .sheet-head { padding: 10px 8px 10px 16px; }
+    .sheet-head { padding: 10px 8px; padding-inline-start: 16px; }
     .sheet-body { padding: 20px 16px 24px; }
     .item-arabic { font-size: 24px; }
     .reader-nav { padding-left: 12px; padding-right: 12px; }
@@ -542,15 +632,15 @@
   <header class="topbar">
     <div class="brand">
       <h1>Deen</h1>
-      <span>Quran &amp; Hadith Q&amp;A with citations</span>
+      <span data-i18n="chat.tagline">Quran &amp; Hadith Q&amp;A with citations</span>
     </div>
     <div class="controls">
-      <label class="field">Text
+      <label class="field"><span data-i18n="chat.text">Text</span>
         <select id="text">
-          <option value="">All texts</option>
+          <option value="" data-i18n="chat.allTexts">All texts</option>
         </select>
       </label>
-      <label class="field">Passages
+      <label class="field"><span data-i18n="chat.passages">Passages</span>
         <select id="topk">
           <option>3</option>
           <option selected>5</option>
@@ -561,9 +651,17 @@
         </select>
       </label>
     </div>
+    <label class="lang-pick">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
+      <span class="sr-only" data-i18n="lang.label">Language</span>
+      <select id="language"></select>
+    </label>
     <div class="top-actions">
       <!-- A button for each reader with passages (Duas, Namaz Shikkha) is added here from GET /read. -->
-      <button type="button" class="ghost" id="clear" disabled>New chat</button>
+      <button type="button" class="ghost" id="zakat-open" aria-haspopup="dialog" data-i18n="zakat.button">Zakat</button>
+      <!-- Books opens in a new tab, so the conversation (kept only in this page) isn't lost. -->
+      <a class="ghost" id="books-link" href="/books" target="_blank" hidden data-i18n="chat.books">Books</a>
+      <button type="button" class="ghost" id="clear" disabled data-i18n="chat.newChat">New chat</button>
     </div>
   </header>
 
@@ -586,29 +684,30 @@
     <div class="sheet-body" id="reader-body" aria-live="polite"></div>
     <div class="reader-nav">
       <button type="button" class="ghost" id="reader-prev">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        Previous
+        <svg class="flip-rtl" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span data-i18n="reader.previous">Previous</span>
       </button>
       <label class="reader-jump">
-        <input type="number" id="reader-position" min="1" inputmode="numeric" aria-label="Passage number">
-        <span>of <span id="reader-total">0</span></span>
+        <input type="number" id="reader-position" min="1" inputmode="numeric" aria-label="Passage number" data-i18n-aria-label="reader.position">
+        <span id="reader-of"></span>
       </label>
       <button type="button" class="ghost" id="reader-next">
-        Next
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+        <span data-i18n="reader.next">Next</span>
+        <svg class="flip-rtl" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
       </button>
     </div>
   </dialog>
 
   <main class="chat" id="chat">
     <section class="empty" id="empty">
-      <h2>Ask about the Quran and Hadith</h2>
-      <p>Answers follow the Hanafi school and come only from passages found in the Quran and Hadith, with every source cited: Surah and Ayah for the Quran, and collection, number and grade for each hadith. Ask in English, Arabic or Bengali, and follow up as you go.</p>
+      <h2 data-i18n="chat.emptyTitle">Ask about the Quran and Hadith</h2>
+      <p data-i18n="chat.emptyBody">Answers follow the Hanafi school and come only from passages found in the Quran and Hadith, with every source cited: Surah and Ayah for the Quran, and collection, number and grade for each hadith. Ask in English, Arabic or Bengali, and follow up as you go.</p>
       <div class="chips">
-        <button type="button" class="chip">What does the Quran say about patience in hardship?</button>
-        <button type="button" class="chip">What do the hadith say about the virtue of charity?</button>
-        <button type="button" class="chip" lang="bn">রোজার ফজিলত সম্পর্কে হাদিসে কী বলা হয়েছে?</button>
-        <button type="button" class="chip" lang="ar" dir="rtl">ماذا يقول القرآن عن بر الوالدين؟</button>
+        <!-- The first two follow the page's language; the last two always show Bengali and Arabic questions. -->
+        <button type="button" class="chip" dir="auto" data-i18n="chat.chip1">What does the Quran say about patience in hardship?</button>
+        <button type="button" class="chip" dir="auto" data-i18n="chat.chip2">What do the hadith say about the virtue of charity?</button>
+        <button type="button" class="chip" lang="bn" dir="auto">রোজার ফজিলত সম্পর্কে হাদিসে কী বলা হয়েছে?</button>
+        <button type="button" class="chip" lang="ar" dir="auto">ماذا يقول القرآن عن بر الوالدين؟</button>
       </div>
     </section>
     <div class="thread" id="thread" role="log" aria-live="polite" aria-label="Conversation"></div>
@@ -616,35 +715,35 @@
 
   <footer class="composer-wrap">
     <form class="composer" id="composer">
-      <label for="input" class="sr-only">Your question</label>
-      <textarea id="input" rows="1" maxlength="2000" dir="auto" placeholder="Ask about the Quran or Hadith…" autocomplete="off"></textarea>
-      <button type="submit" class="send" id="send" aria-label="Send question" disabled>
+      <label for="input" class="sr-only" data-i18n="chat.inputLabel">Your question</label>
+      <textarea id="input" rows="1" maxlength="2000" dir="auto" placeholder="Ask about the Quran or Hadith…" data-i18n-placeholder="chat.placeholder" autocomplete="off"></textarea>
+      <button type="submit" class="send" id="send" aria-label="Send question" data-i18n-aria-label="chat.send" disabled>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 19V5M5 12l7-7 7 7"/>
         </svg>
       </button>
     </form>
     <div class="hint">
-      <span><span class="keys">Enter to send · Shift+Enter for a new line · </span>Answers can be incomplete, so check the cited sources.</span>
+      <span><span class="keys" data-i18n="chat.keys">Enter to send · Shift+Enter for a new line · </span><span data-i18n="chat.disclaimer">Answers can be incomplete, so check the cited sources.</span></span>
       <span class="count" id="count"></span>
     </div>
   </footer>
 
 <dialog class="sheet" id="prayer" aria-labelledby="prayer-heading">
     <div class="sheet-head">
-      <h2 id="prayer-heading">Azan times</h2>
-      <button type="button" class="icon-btn" id="prayer-close" aria-label="Close azan times">
+      <h2 id="prayer-heading" data-i18n="azan.title">Azan times</h2>
+      <button type="button" class="icon-btn" id="prayer-close" aria-label="Close azan times" data-i18n-aria-label="azan.close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
     </div>
     <div class="sheet-body">
       <div class="prayer-place">
-        <label class="pt-field">Location
+        <label class="pt-field"><span data-i18n="azan.location">Location</span>
           <select id="prayer-city">
-            <option value="">Choose a city…</option>
+            <option value="" data-i18n="azan.chooseCity">Choose a city…</option>
           </select>
         </label>
-        <button type="button" class="ghost" id="prayer-locate">Use my location</button>
+        <button type="button" class="ghost" id="prayer-locate" data-i18n="azan.useLocation">Use my location</button>
       </div>
       <p class="pt-status" id="prayer-status" role="status"></p>
       <div id="prayer-today" hidden>
@@ -653,26 +752,134 @@
         <p class="pt-next" id="prayer-next"></p>
       </div>
       <details class="pt-settings">
-        <summary><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Calculation method</summary>
-        <label>Method
+        <summary><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="azan.method">Calculation method</span></summary>
+        <label><span data-i18n="azan.methodLabel">Method</span>
           <select id="prayer-method"></select>
         </label>
-        <label>Asr
+        <label><span data-i18n="azan.asr">Asr</span>
           <select id="prayer-asr">
-            <option value="hanafi">Hanafi: shadow twice its length</option>
-            <option value="standard">Shafi'i, Maliki, Hanbali: shadow its length</option>
+            <option value="hanafi" data-i18n="azan.asrHanafi">Hanafi: shadow twice its length</option>
+            <option value="standard" data-i18n="azan.asrStandard">Shafi'i, Maliki, Hanbali: shadow its length</option>
           </select>
         </label>
       </details>
-      <p class="pt-note">Times are calculated from the location and may differ by a few minutes from your local mosque's timetable. Your location stays in this browser.</p>
+      <p class="pt-note" data-i18n="azan.note">Times are calculated from the location and may differ by a few minutes from your local mosque's timetable. Your location stays in this browser.</p>
+    </div>
+  </dialog>
+
+  <!-- Zakat: worked out in the browser by /static/zakat.js. Labels that name the weight unit are set by the script. -->
+  <dialog class="sheet" id="zakat" aria-labelledby="zakat-heading">
+    <div class="sheet-head">
+      <h2 id="zakat-heading" data-i18n="zakat.title">Zakat calculator</h2>
+      <button type="button" class="icon-btn" id="zakat-close" aria-label="Close zakat calculator" data-i18n-aria-label="zakat.close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <form class="sheet-body" id="zakat-form" novalidate>
+      <p class="zk-intro" data-i18n="zakat.intro">Work out the zakat on your wealth, following the Hanafi school.</p>
+
+      <fieldset class="zk-group">
+        <legend data-i18n="zakat.prices">Today's prices</legend>
+        <div class="zk-grid">
+          <label class="zk-field"><span data-i18n="zakat.currency">Currency</span>
+            <select id="zk-currency"></select>
+          </label>
+          <label class="zk-field"><span data-i18n="zakat.unit">Weigh gold and silver in</span>
+            <select id="zk-unit">
+              <option value="gram" data-i18n="zakat.unit.gram">grams</option>
+              <option value="tola" data-i18n="zakat.unit.tola">tola or bhori (11.664 g)</option>
+              <option value="ounce" data-i18n="zakat.unit.ounce">troy ounces (31.1 g)</option>
+            </select>
+          </label>
+          <div class="zk-field">
+            <label for="zk-gold-price" id="zk-gold-price-label">Gold price</label>
+            <input id="zk-gold-price" inputmode="decimal" autocomplete="off" aria-describedby="zk-prices-help">
+          </div>
+          <div class="zk-field">
+            <label for="zk-silver-price" id="zk-silver-price-label">Silver price</label>
+            <input id="zk-silver-price" inputmode="decimal" autocomplete="off" aria-describedby="zk-prices-help">
+          </div>
+        </div>
+        <p class="zk-help" id="zk-prices-help" data-i18n="zakat.pricesHelp">Use today's local rate for the kind of gold you own (such as 22 carat), for example from your jewellers' association.</p>
+      </fieldset>
+
+      <fieldset class="zk-group">
+        <legend data-i18n="zakat.own">What you own</legend>
+        <div class="zk-grid">
+          <div class="zk-field">
+            <label for="zk-gold" id="zk-gold-label">Gold</label>
+            <input id="zk-gold" inputmode="decimal" autocomplete="off" aria-describedby="zk-gold-help">
+            <p class="zk-help" id="zk-gold-help" data-i18n="zakat.goldHelp">Include jewellery you wear: in the Hanafi school it is zakatable. Gems such as diamonds aren't, unless kept for sale.</p>
+          </div>
+          <div class="zk-field">
+            <label for="zk-silver" id="zk-silver-label">Silver</label>
+            <input id="zk-silver" inputmode="decimal" autocomplete="off">
+          </div>
+          <div class="zk-field">
+            <label for="zk-cash" data-i18n="zakat.cash">Cash, in hand and in the bank</label>
+            <input id="zk-cash" inputmode="decimal" autocomplete="off">
+          </div>
+          <div class="zk-field">
+            <label for="zk-receivables" data-i18n="zakat.receivables">Money owed to you</label>
+            <input id="zk-receivables" inputmode="decimal" autocomplete="off" aria-describedby="zk-receivables-help">
+            <p class="zk-help" id="zk-receivables-help" data-i18n="zakat.receivablesHelp">Loans you've given that you expect to be repaid. You may pay their zakat when you get them back.</p>
+          </div>
+          <div class="zk-field">
+            <label for="zk-stock" data-i18n="zakat.stock">Goods for sale</label>
+            <input id="zk-stock" inputmode="decimal" autocomplete="off" aria-describedby="zk-stock-help">
+            <p class="zk-help" id="zk-stock-help" data-i18n="zakat.stockHelp">Stock you bought to sell, at today's selling price.</p>
+          </div>
+          <div class="zk-field">
+            <label for="zk-investments" data-i18n="zakat.investments">Shares, funds and savings schemes</label>
+            <input id="zk-investments" inputmode="decimal" autocomplete="off" aria-describedby="zk-investments-help">
+            <p class="zk-help" id="zk-investments-help" data-i18n="zakat.investmentsHelp">At today's value. If you hold shares for their dividends rather than to sell, ask a scholar: only part may be zakatable.</p>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="zk-group">
+        <legend data-i18n="zakat.owe">What you owe</legend>
+        <div class="zk-grid">
+          <div class="zk-field">
+            <label for="zk-debts" data-i18n="zakat.debts">Debts due</label>
+            <input id="zk-debts" inputmode="decimal" autocomplete="off" aria-describedby="zk-debts-help">
+            <p class="zk-help" id="zk-debts-help" data-i18n="zakat.debtsHelp">Money you owe now, and this year's instalments of long-term loans such as a home loan.</p>
+          </div>
+          <label class="zk-field"><span data-i18n="zakat.standard">Nisab</span>
+            <select id="zk-standard">
+              <option value="hanafi" data-i18n="zakat.standardHanafi">Hanafi: silver when your wealth is mixed</option>
+              <option value="gold" data-i18n="zakat.standardGold">Gold, for all wealth</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
+      <section class="zk-result" aria-labelledby="zk-result-title">
+        <h3 id="zk-result-title" data-i18n="zakat.result">Your zakat</h3>
+        <div id="zk-result" role="status"></div>
+      </section>
+      <ul class="zk-notes">
+        <li data-i18n="zakat.noteYear">Zakat is due on wealth at or above the nisab once you have held it for a full lunar (Hijri) year.</li>
+        <li data-i18n="zakat.noteExempt">Your home, car, household goods and personal belongings aren't zakatable.</li>
+        <li data-i18n="zakat.noteScholar">This follows the Hanafi school. For a business, shares, loans or other complex cases, ask a qualified Hanafi scholar.</li>
+        <li data-i18n="zakat.notePrivacy">Worked out in this browser. Prices and settings are remembered here; amounts aren't.</li>
+      </ul>
+      <button type="button" class="ghost" id="zk-clear" data-i18n="zakat.clear">Clear amounts</button>
+    </form>
+    <div class="zk-footer">
+      <p class="zk-due"><span id="zk-due-label" data-i18n="zakat.dueShort">Zakat due</span><strong id="zk-due">—</strong></p>
+      <button type="button" class="ghost" id="zk-ask" data-i18n="zakat.ask">Ask Deen about zakat</button>
     </div>
   </dialog>
 
 <script src="/static/prayer-times.js"></script>
+<script src="/static/zakat.js"></script>
 <script>
 (() => {
   "use strict";
 
+  const I18n = window.DeenI18n; // static/i18n.js: the page's own text in English, Bengali and Arabic
+  const t = I18n.t;
   const MAX_CHARS = 2000;
   const MAX_HISTORY = 8; // messages sent with each question; matches MAX_HISTORY_MESSAGES in main.py
   const MAX_HISTORY_CHARS = 4000; // per message; the API accepts up to 10000
@@ -733,13 +940,35 @@
     return null;
   }
 
-  // Text in any language: direction follows the content (Arabic reads right to left), lang where known.
+  // The language to tag content with: Bengali or Arabic by script, English for Latin text, otherwise ""
+  // (unknown). Content is always tagged, so English text on a page shown in Arabic isn't read with an Arabic voice.
+  function contentLang(text) {
+    const lang = scriptLang(text);
+    if (lang) return lang;
+    const letters = text.match(/\p{L}/gu) || [];
+    const latin = letters.filter((c) => /\p{Script=Latin}/u.test(c)).length;
+    return letters.length && latin / letters.length > 0.5 ? "en" : "";
+  }
+
+  // Text in any language: direction follows the content (Arabic reads right to left), lang as above.
   function textEl(tag, className, text) {
     const node = el(tag, className, text);
     node.dir = "auto";
-    const lang = scriptLang(text);
-    if (lang) node.lang = lang;
+    node.lang = contentLang(text);
     return node;
+  }
+
+  function bookIcon() {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    for (const [name, value] of Object.entries({ width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+      "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) {
+      svg.setAttribute(name, String(value));
+    }
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", "M12 6.5C10 5 7.4 4.4 4 4.5v13c3.4-.1 6 .5 8 2 2-1.5 4.6-2.1 8-2v-13c-3.4-.1-6 .5-8 2zm0 0v13");
+    svg.append(path);
+    return svg;
   }
 
   // Mirrors display_name() in main.py.
@@ -846,7 +1075,7 @@
     const dots = el("span", "dots");
     dots.setAttribute("aria-hidden", "true");
     dots.append(el("i"), el("i"), el("i"));
-    typing.append(dots, el("span", null, "Searching the texts and writing an answer…"));
+    typing.append(dots, el("span", null, t("chat.searching")));
     bubble.classList.remove("error");
     bubble.setAttribute("aria-busy", "true");
     bubble.replaceChildren(typing);
@@ -855,17 +1084,28 @@
   function renderSources(sources) {
     const details = el("details", "sources");
     const summary = el("summary");
-    summary.append(chevron(), sources.length + (sources.length === 1 ? " source" : " sources"));
+    summary.append(chevron(), t("chat.sources", { count: sources.length }));
     details.append(summary);
     const list = el("ol");
     for (const s of sources) {
       const item = el("li");
       const head = el("div", "source-head");
-      head.append(el("span", "source-ref", s.reference || prettyName(s.namespace)));
+      head.append(textEl("span", "source-ref", s.reference || prettyName(s.namespace)));
       if (s.namespace) head.append(el("span", "badge", prettyName(s.namespace)));
-      if (typeof s.score === "number") head.append(el("span", "score", "score " + s.score.toFixed(3)));
       item.append(head);
       if (s.excerpt) item.append(textEl("p", "excerpt", s.excerpt));
+      // A passage from an uploaded PDF links to its page on the books page, in a new tab so the chat stays.
+      if (s.book && s.book.url) {
+        const link = el("a", "book-link");
+        link.href = s.book.url;
+        link.target = "_blank";
+        link.dir = "auto";
+        const label = s.book.page
+          ? t("chat.readBookPage", { title: s.book.title, page: s.book.page })
+          : t("chat.readBook", { title: s.book.title });
+        link.append(bookIcon(), el("span", null, label));
+        item.append(link);
+      }
       list.append(item);
     }
     details.append(list);
@@ -877,13 +1117,12 @@
     bubble.replaceChildren();
     // A follow-up is rewritten into a standalone question before searching; show it so the user can check it.
     if (data.search_query && data.search_query !== question) {
-      const searched = el("p", "searched", "Searched for: ");
+      const searched = el("p", "searched", t("chat.searchedFor"));
       searched.append(textEl("q", null, data.search_query));
       bubble.append(searched);
     }
     const answer = el("div", "answer");
-    const lang = scriptLang(data.answer || "");
-    if (lang) answer.lang = lang;
+    answer.lang = contentLang(data.answer || "");
     answer.innerHTML = renderMarkdown(data.answer || "");
     bubble.append(answer);
     if (Array.isArray(data.sources) && data.sources.length) bubble.append(renderSources(data.sources));
@@ -894,27 +1133,27 @@
     bubble.classList.add("error");
     bubble.replaceChildren(el("p", "error-text", message));
     if (retry) {
-      const button = el("button", "retry", "Try again");
+      const button = el("button", "retry", t("chat.retry"));
       button.type = "button";
       button.addEventListener("click", () => { if (!busy) retry(); });
       bubble.append(button);
     }
   }
 
-  // FastAPI errors arrive as {detail: string | {message, ...} | [{msg, ...}]}.
+  // FastAPI errors arrive as {detail: string | {message, ...} | [{msg, ...}]}. The server's own messages are in English.
   async function readError(res) {
     let detail;
     try { detail = (await res.json()).detail; } catch (_) { /* not JSON */ }
     if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) return detail.map((d) => d.msg).filter(Boolean).join("; ") || "Invalid request.";
+    if (Array.isArray(detail)) return detail.map((d) => d.msg).filter(Boolean).join("; ") || t("chat.invalid");
     if (detail && detail.message) {
       let msg = detail.message;
       if (Array.isArray(detail.available_namespaces)) {
-        msg += " Available texts: " + detail.available_namespaces.map(prettyName).join(", ") + ".";
+        msg += t("chat.availableTexts", { list: detail.available_namespaces.map(prettyName).join(", ") });
       }
       return msg;
     }
-    return "The server returned an error (HTTP " + res.status + ").";
+    return t("chat.httpError", { status: String(res.status) });
   }
 
   // ---------- API ----------
@@ -930,7 +1169,7 @@
       top_k: topK,
       history: history.slice(-MAX_HISTORY).map((m) => ({ role: m.role, content: m.content.slice(0, MAX_HISTORY_CHARS) })),
     };
-    const userMsg = addUserMessage(question, (namespace ? prettyName(namespace) : "All texts") + " · " + topK + " passages");
+    const userMsg = addUserMessage(question, t("chat.scope", { text: namespace ? prettyName(namespace) : t("chat.allTexts"), count: topK }));
     const bubble = addBotMessage();
     request(payload, userMsg, bubble);
   }
@@ -949,7 +1188,7 @@
           body: JSON.stringify(payload),
         });
       } catch (_) {
-        showError(bubble, "Could not reach the server. Check that it is running, then try again.", retry);
+        showError(bubble, t("chat.unreachable"), retry);
         return;
       }
       if (!res.ok) {
@@ -960,7 +1199,7 @@
       try {
         data = await res.json();
       } catch (_) {
-        showError(bubble, "The server's reply could not be read. Try again in a moment.", retry);
+        showError(bubble, t("chat.unreadable"), retry);
         return;
       }
       showAnswer(bubble, data, payload.query);
@@ -986,8 +1225,17 @@
       }
     } catch (err) {
       console.warn("Could not load the list of texts:", err);
-      textSelect.title = "Could not load the list of texts; searching all texts.";
+      textSelect.dataset.i18nTitle = "chat.textsFailed"; // re-translated when the language changes
+      textSelect.title = t("chat.textsFailed");
     }
+  }
+
+  // The Books link appears once there is at least one book to read.
+  async function showBooksLink() {
+    try {
+      const res = await fetch("/books/list");
+      if (res.ok && ((await res.json()).books || []).length) $("books-link").hidden = false;
+    } catch (_) { /* no books page until the server can be reached */ }
   }
 
   // ---------- readers (Duas, Namaz Shikkha) ----------
@@ -1001,6 +1249,10 @@
   const readerCache = new Map(); // "text:position" -> item, for this page load
   const lastPositions = {}; // text -> position last shown on this page load
   const reader = { text: null, name: "", total: 0, position: null, request: 0 };
+  const readerButtons = []; // [button, reader from GET /read], relabelled when the language changes
+
+  // A reader's name in the page's language; the server's name for readers without a translation.
+  const readerName = (r) => t("reader." + r.text, null, r.name);
 
   const positionKey = (text) => "deen-read-position:" + text;
 
@@ -1032,7 +1284,7 @@
 
   function updateReaderNav() {
     const { total, position } = reader;
-    $("reader-total").textContent = total.toLocaleString();
+    $("reader-of").textContent = t("reader.of", { total });
     readerInput.max = String(total);
     readerInput.value = total && position != null ? String(position + 1) : "";
     readerInput.disabled = readerPrev.disabled = readerNext.disabled = total < 2;
@@ -1066,13 +1318,12 @@
   function showReaderEmpty() {
     reader.total = 0;
     updateReaderNav();
-    showReaderNote("Nothing has been added to " + reader.name + " yet. Admins can add it by uploading files "
-      + "to the text named “" + reader.text + "”.");
+    showReaderNote(t("reader.empty", { name: reader.name, text: reader.text }));
   }
 
   function showReaderError(message, retry) {
     const box = el("div", "reader-error");
-    const button = el("button", "retry", "Try again");
+    const button = el("button", "retry", t("chat.retry"));
     button.type = "button";
     button.addEventListener("click", retry);
     box.append(el("p", "error-text", message), button);
@@ -1086,7 +1337,7 @@
     reader.position = lastPositions[text] = position;
     const request = ++reader.request;
     updateReaderNav();
-    if (!readerCache.has(text + ":" + position)) showReaderNote("Loading…");
+    if (!readerCache.has(text + ":" + position)) showReaderNote(t("reader.loading"));
     try {
       const item = await fetchItem(text, position);
       if (request !== reader.request) return; // the reader has already moved on
@@ -1099,15 +1350,19 @@
     }
   }
 
+  function labelReader() {
+    $("reader-heading").textContent = reader.name;
+    $("reader-close").setAttribute("aria-label", t("reader.close", { name: reader.name }));
+  }
+
   async function openReader(text, name) {
     Object.assign(reader, { text, name, total: 0, position: null });
     const request = ++reader.request;
-    $("reader-heading").textContent = name;
+    labelReader();
     $("reader-section").textContent = "";
-    $("reader-close").setAttribute("aria-label", "Close " + name);
     updateReaderNav();
     if (!readerDialog.open) readerDialog.showModal();
-    showReaderNote("Loading…");
+    showReaderNote(t("reader.loading"));
     try {
       await getPage(text, null); // the current total
     } catch (err) {
@@ -1128,11 +1383,12 @@
     }
     for (const r of readers) {
       if (!r.total) continue;
-      const button = el("button", "ghost", r.name);
+      const button = el("button", "ghost", readerName(r));
       button.type = "button";
       button.setAttribute("aria-haspopup", "dialog");
-      button.addEventListener("click", () => openReader(r.text, r.name));
-      clear.before(button);
+      button.addEventListener("click", () => openReader(r.text, readerName(r)));
+      $("zakat-open").before(button);
+      readerButtons.push([button, r]);
     }
   }
 
@@ -1149,8 +1405,11 @@
   });
   readerDialog.addEventListener("keydown", (event) => {
     if (event.target === readerInput || event.altKey || event.ctrlKey || event.metaKey || reader.total < 2) return;
-    if (event.key === "ArrowRight") { event.preventDefault(); showItem(reader.position + 1); }
-    if (event.key === "ArrowLeft") { event.preventDefault(); showItem(reader.position - 1); }
+    // The arrow towards the Next button goes forward: the right arrow, or the left one when the page reads right to left.
+    const forward = I18n.dir === "rtl" ? "ArrowLeft" : "ArrowRight";
+    const back = I18n.dir === "rtl" ? "ArrowRight" : "ArrowLeft";
+    if (event.key === forward) { event.preventDefault(); showItem(reader.position + 1); }
+    if (event.key === back) { event.preventDefault(); showItem(reader.position - 1); }
   });
 
   // ---------- azan times ----------
@@ -1158,7 +1417,7 @@
 
   const PT = window.PrayerTimes;
   const PRAYER_KEY = "deen-prayer";
-  const PRAYER_NAMES = { fajr: "Fajr", sunrise: "Sunrise", dhuhr: "Dhuhr", asr: "Asr", maghrib: "Maghrib", isha: "Isha" };
+  const prayerName = (name) => t("prayer." + name); // fajr, sunrise, dhuhr, asr, maghrib, isha
   const HERE = "here"; // the city select's value for "my location"
   const prayerDialog = $("prayer");
   const citySelect = $("prayer-city");
@@ -1184,16 +1443,16 @@
   }
 
   function clockFormat(timeZone) {
-    return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone });
+    return new Intl.DateTimeFormat(I18n.lang, { hour: "numeric", minute: "2-digit", timeZone });
   }
 
   function untilText(time) {
     const minutes = Math.max(0, Math.round((time - Date.now()) / 60000));
-    if (minutes < 1) return "now";
+    if (minutes < 1) return t("azan.now");
     const parts = [];
-    if (minutes >= 60) parts.push(Math.floor(minutes / 60) + " h");
-    if (minutes % 60) parts.push((minutes % 60) + " min");
-    return "in " + parts.join(" ");
+    if (minutes >= 60) parts.push(t("azan.hours", { count: Math.floor(minutes / 60) }));
+    if (minutes % 60) parts.push(t("azan.minutes", { count: minutes % 60 }));
+    return t("azan.in", { time: parts.join(" ") });
   }
 
   function fillPrayerSelects() {
@@ -1222,23 +1481,26 @@
     option.textContent = placeLabel(place);
   }
 
+  // A listed city keeps its (English) name; the browser's location is called "My location" in the page's language.
+  const placeName = (place) => (place.id ? place.name : t("azan.myLocation"));
+
   function placeLabel(place) {
-    if (place.country) return place.name + ", " + place.country;
-    return place.coords ? place.name + " (" + place.coords + ")" : place.name;
+    if (place.country) return placeName(place) + ", " + place.country;
+    return place.coords ? placeName(place) + " (" + place.coords + ")" : placeName(place);
   }
 
   // The bar under the top bar: the next azan, or an invitation to choose a location.
   function renderPrayerBar() {
     const summary = $("prayer-summary");
     if (!prayer.place) {
-      summary.replaceChildren(el("span", "pb-cta", "Azan times: choose your location"));
+      summary.replaceChildren(el("span", "pb-cta", t("azan.cta")));
       return;
     }
     const next = PT.next(new Date(), prayer.place, prayer);
-    const parts = [el("span", "pb-place", prayer.place.name)];
+    const parts = [el("span", "pb-place", placeName(prayer.place))];
     if (next) {
-      const when = el("strong", null, PRAYER_NAMES[next.name] + " " + clockFormat(prayer.place.timeZone).format(next.time));
-      const label = el("span", "pb-next", "Next: ");
+      const when = el("strong", null, prayerName(next.name) + " " + clockFormat(prayer.place.timeZone).format(next.time));
+      const label = el("span", "pb-next", t("azan.next"));
       label.append(when);
       parts.push(label, el("span", "pb-in", untilText(next.time)));
     }
@@ -1258,9 +1520,9 @@
     const { times } = PT.forDay(now, prayer.place, prayer);
     const next = PT.next(now, prayer.place, prayer);
     const clock = clockFormat(timeZone);
-    const dateText = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone }).format(now);
+    const dateText = new Intl.DateTimeFormat(I18n.lang, { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone }).format(now);
     $("prayer-date").textContent = dateText + " · " + placeLabel(prayer.place)
-      + (timeZone !== browserZone ? " (local time there)" : "");
+      + (timeZone !== browserZone ? t("azan.localTime") : "");
 
     const list = $("prayer-times");
     list.replaceChildren();
@@ -1268,16 +1530,16 @@
       const row = el("div", "pt-row" + (name === "sunrise" ? " sunrise" : ""));
       const isNext = next && next.name === name && times[name] && next.time.getTime() === times[name].getTime();
       if (isNext) row.classList.add("next");
-      const dt = el("dt", null, PRAYER_NAMES[name]);
-      if (name === "sunrise") dt.append(el("span", "pt-tag", "no azan"));
-      if (isNext) dt.append(el("span", "pt-tag next-tag", "next · " + untilText(next.time)));
+      const dt = el("dt", null, prayerName(name));
+      if (name === "sunrise") dt.append(el("span", "pt-tag", t("azan.noAzan")));
+      if (isNext) dt.append(el("span", "pt-tag next-tag", t("azan.nextTag", { when: untilText(next.time) })));
       row.append(dt, el("dd", null, times[name] ? clock.format(times[name]) : "—"));
       list.append(row);
     }
     // After Isha the next azan is tomorrow's Fajr, which isn't in today's list.
     const tomorrow = next && !Object.values(times).some((t) => t && t.getTime() === next.time.getTime());
     $("prayer-next").textContent = tomorrow
-      ? "Next azan: Fajr tomorrow at " + clock.format(next.time) + ", " + untilText(next.time) + "."
+      ? t("azan.tomorrow", { time: clock.format(next.time), when: untilText(next.time) })
       : "";
   }
 
@@ -1315,7 +1577,7 @@
   locate.hidden = !("geolocation" in navigator) || !window.isSecureContext;
   locate.addEventListener("click", () => {
     locate.disabled = true;
-    setPrayerStatus("Finding your location…");
+    setPrayerStatus(t("azan.finding"));
     navigator.geolocation.getCurrentPosition((position) => {
       locate.disabled = false;
       setPrayerStatus("");
@@ -1331,9 +1593,7 @@
       setPlace(place, nearest.method);
     }, (error) => {
       locate.disabled = false;
-      setPrayerStatus(error.code === error.PERMISSION_DENIED
-        ? "Location access was turned down. Choose a city instead, or allow location for this site."
-        : "Your location couldn't be found. Choose a city instead.", true);
+      setPrayerStatus(error.code === error.PERMISSION_DENIED ? t("azan.denied") : t("azan.notFound"), true);
     }, { timeout: 15000, maximumAge: 3600000 });
   });
 
@@ -1353,6 +1613,212 @@
   if (prayer.place && !prayer.place.id) setHereOption(prayer.place);
   renderPrayer();
   setInterval(renderPrayer, 30000); // keep the countdown and the day current
+
+  // ---------- zakat ----------
+  // Worked out in the browser by /static/zakat.js (the Hanafi rules are explained there), so the
+  // figures never leave it. Prices, currency, unit and nisab choice are remembered; amounts aren't.
+
+  const Z = window.Zakat;
+  const ZAKAT_KEY = "deen-zakat";
+  const ZAKAT_AMOUNTS = ["gold", "silver", "cash", "receivables", "stock", "investments", "debts"]; // inputs #zk-<name>
+  const zakatDialog = $("zakat");
+  const zk = {
+    currency: $("zk-currency"), unit: $("zk-unit"), standard: $("zk-standard"),
+    goldPrice: $("zk-gold-price"), silverPrice: $("zk-silver-price"),
+  };
+  let zakatUnit = "gram"; // the unit the price and weight fields are in now
+
+  // Write a number into a field: rounded, in plain ASCII digits. The exact value is kept with it and
+  // used until the field is edited, so changing the unit back and forth never changes the zakat.
+  function setNumber(field, value, digits) {
+    field.value = String(Math.round(value * 10 ** digits) / 10 ** digits);
+    field.dataset.exact = String(value);
+    field.dataset.shown = field.value;
+  }
+
+  // A field's number: null when blank, NaN when it isn't a number (Zakat.parseAmount).
+  function fieldNumber(field) {
+    return field.dataset.shown === field.value ? Number(field.dataset.exact) : Z.parseAmount(field.value);
+  }
+
+  // The usual currency: the azan city's country, else the browser's region, else the page's language.
+  function zakatDefaults() {
+    let currency = prayer.place && prayer.place.country ? Z.COUNTRY_CURRENCIES[prayer.place.country] : null;
+    for (const tag of navigator.languages || [navigator.language || ""]) {
+      if (currency) break;
+      currency = Z.REGION_CURRENCIES[(String(tag).split("-")[1] || "").toUpperCase()] || null;
+    }
+    return {
+      currency: currency || { bn: "BDT", ar: "SAR" }[I18n.lang] || "USD",
+      unit: I18n.lang === "bn" ? "tola" : "gram", // gold is sold by the bhori in Bangladesh
+      standard: "hanafi", goldPrice: null, silverPrice: null,
+    };
+  }
+
+  function loadZakat() {
+    const settings = zakatDefaults();
+    try {
+      const saved = JSON.parse(localStorage.getItem(ZAKAT_KEY) || "null");
+      if (saved && typeof saved === "object") {
+        if (Z.CURRENCIES.includes(saved.currency)) settings.currency = saved.currency;
+        if (Z.UNITS[saved.unit]) settings.unit = saved.unit;
+        if (saved.standard === "gold") settings.standard = "gold";
+        for (const key of ["goldPrice", "silverPrice"]) if (saved[key] > 0) settings[key] = saved[key];
+      }
+    } catch (_) { /* storage blocked or damaged: start fresh */ }
+    return settings;
+  }
+
+  function saveZakat() {
+    const perGram = (field) => {
+      const value = fieldNumber(field);
+      return value > 0 ? value / Z.UNITS[zakatUnit] : null;
+    };
+    const settings = { currency: zk.currency.value, unit: zakatUnit, standard: zk.standard.value,
+      goldPrice: perGram(zk.goldPrice), silverPrice: perGram(zk.silverPrice) };
+    try { localStorage.setItem(ZAKAT_KEY, JSON.stringify(settings)); } catch (_) { /* storage blocked */ }
+  }
+
+  function fillZakatCurrencies() {
+    const chosen = zk.currency.value;
+    let names = null;
+    try { names = new Intl.DisplayNames([I18n.lang], { type: "currency" }); } catch (_) { /* old browser: codes only */ }
+    zk.currency.replaceChildren(...Z.CURRENCIES.map((code) => new Option(names ? names.of(code) + " · " + code : code, code)));
+    if (chosen) zk.currency.value = chosen;
+  }
+
+  // Labels that name the unit, and currency names, in the page's language.
+  function labelZakat() {
+    const unit = t("zakat.unitName." + zakatUnit);
+    $("zk-gold-price-label").textContent = t("zakat.goldPrice", { unit });
+    $("zk-silver-price-label").textContent = t("zakat.silverPrice", { unit });
+    $("zk-gold-label").textContent = t("zakat.gold", { unit });
+    $("zk-silver-label").textContent = t("zakat.silver", { unit });
+    fillZakatCurrencies();
+  }
+
+  // The form as numbers for Zakat.calculate: prices per gram, weights in grams. Marks fields that aren't numbers.
+  function zakatValues() {
+    const factor = Z.UNITS[zakatUnit];
+    let invalid = false;
+    const read = (field) => {
+      const value = fieldNumber(field);
+      const bad = Number.isNaN(value);
+      field.setAttribute("aria-invalid", String(bad));
+      invalid = invalid || bad;
+      return bad || value == null ? null : value;
+    };
+    const values = { standard: zk.standard.value };
+    const goldPrice = read(zk.goldPrice);
+    const silverPrice = read(zk.silverPrice);
+    values.goldPrice = goldPrice ? goldPrice / factor : null;
+    values.silverPrice = silverPrice ? silverPrice / factor : null;
+    for (const name of ZAKAT_AMOUNTS) {
+      const value = read($("zk-" + name)) || 0;
+      values[name] = name === "gold" || name === "silver" ? value * factor : value;
+    }
+    return { values, invalid };
+  }
+
+  function zakatMoney(amount) {
+    return new Intl.NumberFormat(I18n.lang, { style: "currency", currency: zk.currency.value, maximumFractionDigits: 2 }).format(amount);
+  }
+
+  function zakatWeight(grams) {
+    return t("zakat.amount." + zakatUnit, { n: Math.round((grams / Z.UNITS[zakatUnit]) * 100) / 100 });
+  }
+
+  const ZAKAT_BASIS = { silver: "zakat.basisSilver", "gold-only": "zakat.basisGoldOnly", "silver-only": "zakat.basisSilverOnly", gold: "zakat.basisGold" };
+
+  function renderZakat() {
+    const { values, invalid } = zakatValues();
+    const result = Z.calculate(values);
+    const box = $("zk-result");
+    const due = $("zk-due");
+    const message = (text, error) => {
+      box.replaceChildren(el("p", "zk-message" + (error ? " error" : ""), text));
+      due.textContent = "—";
+    };
+    if (invalid) return message(t("zakat.invalid"), true);
+    if (result.empty) return message(t("zakat.empty"));
+    if (result.missing.length) return message(t(result.missing[0] === "goldPrice" ? "zakat.needGoldPrice" : "zakat.needSilverPrice"));
+
+    const rows = el("dl", "zk-rows");
+    const row = (label, value, sub) => {
+      const dd = el("dd", null, value);
+      if (sub) dd.append(el("span", "zk-sub", sub));
+      rows.append(el("dt", null, label), dd);
+    };
+    row(t("zakat.assetsTotal"), zakatMoney(result.assets));
+    if (result.debts) row(t("zakat.debtsTotal"), "−" + zakatMoney(result.debts));
+    row(t("zakat.net"), zakatMoney(result.net));
+    row(t("zakat.nisab"), zakatMoney(result.nisabValue),
+      t(result.metal === "gold" ? "zakat.ofGold" : "zakat.ofSilver", { amount: zakatWeight(result.nisabGrams) }));
+    const total = el("div", "zk-total");
+    if (result.reached) total.append(el("span", null, t("zakat.due")), el("strong", null, zakatMoney(result.due)));
+    else total.append(el("span", null, t("zakat.notDue")));
+    box.replaceChildren(rows, el("p", "zk-basis", t(ZAKAT_BASIS[result.basis])), total);
+    due.textContent = result.reached ? zakatMoney(result.due) : t("zakat.belowNisab");
+  }
+
+  function openZakat() {
+    labelZakat();
+    renderZakat();
+    zakatDialog.showModal();
+  }
+
+  $("zakat-form").addEventListener("submit", (event) => event.preventDefault()); // Enter in a field submits nothing
+  $("zakat-form").addEventListener("input", (event) => {
+    if (event.target === zk.goldPrice || event.target === zk.silverPrice) saveZakat();
+    renderZakat();
+  });
+  for (const select of [zk.currency, zk.standard]) select.addEventListener("change", () => { saveZakat(); renderZakat(); });
+  // A new unit keeps the same prices and weights, written in that unit.
+  zk.unit.addEventListener("change", () => {
+    const from = Z.UNITS[zakatUnit];
+    const to = Z.UNITS[zk.unit.value];
+    const convert = (field, scale, digits) => {
+      const value = fieldNumber(field);
+      if (value > 0) setNumber(field, value * scale, digits);
+    };
+    convert(zk.goldPrice, to / from, 2);
+    convert(zk.silverPrice, to / from, 2);
+    convert($("zk-gold"), from / to, 3);
+    convert($("zk-silver"), from / to, 3);
+    zakatUnit = zk.unit.value;
+    labelZakat();
+    saveZakat();
+    renderZakat();
+  });
+  $("zk-clear").addEventListener("click", () => {
+    for (const name of ZAKAT_AMOUNTS) $("zk-" + name).value = "";
+    renderZakat();
+    if (finePointer) $("zk-gold").focus();
+  });
+  // Evidence for the rules comes from the texts: ask the chat, which answers with citations.
+  $("zk-ask").addEventListener("click", () => {
+    zakatDialog.close();
+    if (busy) return;
+    input.value = t("zakat.askQuestion");
+    form.requestSubmit();
+  });
+  $("zakat-open").addEventListener("click", openZakat);
+  $("zakat-close").addEventListener("click", () => zakatDialog.close());
+  zakatDialog.addEventListener("click", (event) => {
+    if (event.target === zakatDialog) zakatDialog.close(); // a click on the backdrop
+  });
+
+  (function startZakat() {
+    const settings = loadZakat();
+    zakatUnit = zk.unit.value = settings.unit;
+    zk.standard.value = settings.standard;
+    fillZakatCurrencies();
+    zk.currency.value = settings.currency;
+    const factor = Z.UNITS[zakatUnit];
+    if (settings.goldPrice) setNumber(zk.goldPrice, settings.goldPrice * factor, 2);
+    if (settings.silverPrice) setNumber(zk.silverPrice, settings.silverPrice * factor, 2);
+    labelZakat();
+  })();
 
   // ---------- events ----------
 
@@ -1391,8 +1857,36 @@
     focusInput();
   });
 
+  // ---------- language ----------
+  // Translates the page's own text; answers follow the language of the question, as before.
+
+  function translateChips() {
+    // The translated examples are in the page's language; the fixed Bengali and Arabic ones keep theirs.
+    document.querySelectorAll(".chip[data-i18n]").forEach((chip) => { chip.lang = I18n.lang; });
+  }
+
+  I18n.apply();
+  translateChips();
+  I18n.bindSelect($("language"));
+  I18n.onChange(() => {
+    translateChips();
+    for (const [button, r] of readerButtons) button.textContent = readerName(r);
+    if (reader.text) {
+      const entry = readerButtons.find(([, r]) => r.text === reader.text);
+      if (entry) reader.name = readerName(entry[1]);
+      labelReader();
+    }
+    updateReaderNav();
+    if (prayer.place && !prayer.place.id) setHereOption(prayer.place);
+    renderPrayer();
+    labelZakat();
+    if (zakatDialog.open) renderZakat();
+    // Messages already in the conversation keep the language they were written in.
+  });
+
   loadTexts();
   addReaderButtons();
+  showBooksLink();
   updateComposer();
   focusInput();
 })();

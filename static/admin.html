@@ -85,7 +85,7 @@
     font: 15px/1.5 var(--sans);
     -webkit-font-smoothing: antialiased;
   }
-  button, input { font: inherit; color: inherit; }
+  button, input, select { font: inherit; color: inherit; }
   button { touch-action: manipulation; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   ::selection { background: var(--selection); color: var(--ink); }
@@ -160,6 +160,17 @@
   .field input::placeholder { color: var(--muted); opacity: 1; }
   .field input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
   .field input.secret, .field input.mono { font-family: var(--mono); font-size: 14px; }
+  .field select {
+    width: 100%;
+    font-size: 15px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color .15s ease-out, box-shadow .15s ease-out;
+  }
+  .field select:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
   .field input[type="file"] {
     width: 100%;
     font-size: 14px;
@@ -277,6 +288,7 @@
   .log li.pending { color: var(--muted); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E"); }
   .log li.ok { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E"); }
   .log li.ok::before { background: var(--ok-ink); }
+  .log li.warn { color: var(--warn-ink); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5M12 16.5h.01'/%3E%3C/svg%3E"); }
   .log li.error { color: var(--error-ink); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5M12 16.5h.01'/%3E%3C/svg%3E"); }
 
   /* Uploaded files */
@@ -288,6 +300,8 @@
   .file-name { display: block; font-weight: 600; overflow-wrap: anywhere; }
   .file-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-top: 2px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .badge { background: var(--badge-bg); color: var(--badge-ink); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
+  .badge.plain { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .file-meta a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
   .empty-files { margin: 0; color: var(--muted); }
 
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
@@ -299,13 +313,13 @@
     .page { padding: 20px 12px 48px; }
     .card { padding: 16px; }
     .fields.two { grid-template-columns: 1fr; }
-    .field input[type="text"], .field input[type="password"], .field input[type="url"] { font-size: 16px; } /* stops iOS zooming on focus */
+    .field input[type="text"], .field input[type="password"], .field input[type="url"], .field select { font-size: 16px; } /* stops iOS zooming on focus */
     .section-head h2 { font-size: 22px; }
     .signin { margin-top: 5vh; }
     .file { align-items: flex-start; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .ghost, .primary, .danger, .field input, .chev { transition: none; }
+    .ghost, .primary, .danger, .field input, .field select, .chev { transition: none; }
   }
 </style>
 </head>
@@ -401,7 +415,7 @@
         <div id="index-summary">
           <p class="index-line"><strong id="index-name"></strong><span id="index-count">Loading…</span></p>
           <ul class="namespaces" id="namespaces" aria-label="Texts in the index"></ul>
-          <p class="note">Vector counts can take a minute to catch up after an upload or delete.</p>
+          <p class="note">Vector counts can take a minute to catch up after an upload or delete. <span id="book-storage"></span></p>
         </div>
         <p class="status" id="index-status" role="status"></p>
       </section>
@@ -417,10 +431,17 @@
             <span class="help" id="namespace-help">Pick a text, or type a new name to create one (letters, digits, <code>-</code> and <code>_</code>).</span>
           </div>
           <div class="field">
-            <label for="file-input">Files</label>
-            <input type="file" id="file-input" multiple accept=".txt,.md,.pdf,.json,.jsonl,.csv" aria-describedby="file-help">
-            <span class="help" id="file-help">.txt, .md, .pdf, .json, .jsonl or .csv, up to 200 MB each (.json up to 50 MB; use .jsonl for bigger record files).</span>
+            <label for="language">Language</label>
+            <select id="language" required aria-describedby="language-help">
+              <option value="">Choose a language…</option>
+            </select>
+            <span class="help" id="language-help">What the files are written in. The books page lists books in each reader's language first.</span>
           </div>
+        </div>
+        <div class="field url-field">
+          <label for="file-input">Files</label>
+          <input type="file" id="file-input" multiple accept=".txt,.md,.pdf,.json,.jsonl,.csv" aria-describedby="file-help">
+          <span class="help" id="file-help">.txt, .md, .pdf, .json, .jsonl or .csv, up to 200 MB each (.json up to 50 MB; use .jsonl for bigger record files). PDFs are also kept as books that anyone can read on the books page.</span>
         </div>
         <div class="field url-field">
           <label for="url-input">Or download from a web address</label>
@@ -431,7 +452,7 @@
           <summary><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>How files are split and cited</summary>
           <ul>
             <li><strong>.txt, .md</strong>: split into passages of about 1,000 characters.</li>
-            <li><strong>.pdf</strong>: the text of each page, split the same way, with its page number. Scanned PDFs need OCR first.</li>
+            <li><strong>.pdf</strong>: the text of each page, split the same way, with its page number. Scanned PDFs need OCR first. The PDF itself is kept too, from a file or a web address, so anyone can read it page by page on the public <a href="/books" target="_blank">books page</a>, and an answer's sources link to the page each passage came from. Deleting the file removes the book.</li>
             <li><strong>.json, .jsonl, .csv</strong>: one record per array item, line or row. Each record needs a <code>text</code> (or <code>content</code>) field. Its other fields are kept, so answers can cite them: <code>surah</code> and <code>ayah</code> for the Quran; <code>collection</code>, <code>hadith_number</code>, <code>grade</code> and <code>book</code> for hadith.
               <pre><code>{"text": "Actions are judged by intentions…", "collection": "Sahih al-Bukhari", "hadith_number": 1, "grade": "Sahih"}</code></pre>
             </li>
@@ -469,6 +490,7 @@
   const $ = (id) => document.getElementById(id);
   const numberFormat = new Intl.NumberFormat();
   let token = "";
+  let languages = {}; // code -> name, from GET /files
 
   // A rejected or missing token. The sign-in form already shows the message.
   class AuthError extends Error {}
@@ -678,6 +700,15 @@
       if (ns.namespace && ns.namespace !== "__default__") options.append(new Option(prettyName(ns.namespace), ns.namespace));
     }
     if (!data.namespaces.length) chips.append(el("li", "none", "No texts yet"));
+    $("book-storage").textContent = data.book_storage ? "Uploaded PDFs are kept as books " + data.book_storage + "." : "";
+
+    // The languages a file can be marked with, keeping the current choice.
+    languages = data.languages || {};
+    const select = $("language");
+    const chosen = select.value;
+    select.replaceChildren(new Option("Choose a language…", ""),
+      ...Object.entries(languages).map(([code, name]) => new Option(name, code)));
+    select.value = languages[chosen] ? chosen : "";
   }
 
   function renderFiles(files) {
@@ -690,12 +721,19 @@
       const name = el("span", "file-name", file.filename);
       name.dir = "auto";
       const meta = el("div", "file-meta");
+      meta.append(el("span", "badge", prettyName(file.namespace)));
+      if (file.language) meta.append(el("span", "badge plain", languages[file.language] || file.language));
       meta.append(
-        el("span", "badge", prettyName(file.namespace)),
         el("span", null, plural(file.passages, "passage")),
         el("span", null, fileSize(file.size_bytes)),
         el("span", null, when(file.uploaded_at)),
       );
+      if (file.book) {
+        const read = el("a", null, "Read the book" + (file.pages ? " (" + plural(file.pages, "page") + ")" : ""));
+        read.href = "/books?text=" + encodeURIComponent(file.namespace) + "&book=" + encodeURIComponent(file.file_id);
+        read.target = "_blank";
+        meta.append(read);
+      }
       info.append(name, meta);
       const remove = el("button", "danger", "Delete");
       remove.type = "button";
@@ -748,10 +786,12 @@
 
   function uploadMessage(label, result, namespace) {
     let message = label + ": added " + plural(result.file.passages, "passage") + " to " + prettyName(namespace) + ".";
+    if (result.file.book) message += " It can be read on the books page" + (result.file.pages ? " (" + plural(result.file.pages, "page") + ")" : "") + ".";
     if (result.replaced_versions) message += " It replaced the earlier version.";
     if (result.skipped_records) {
       message += " Skipped " + plural(result.skipped_records, "record") + " with no text or content field.";
     }
+    if (result.warning) message += " " + result.warning;
     return message;
   }
 
@@ -824,12 +864,13 @@
   $("upload-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const namespace = $("namespace").value.trim();
+    const language = $("language").value || null;
     const input = $("file-input");
     const urlInput = $("url-input");
     const files = [...input.files];
     const url = urlInput.value.trim();
     const log = $("upload-log");
-    if (!namespace) return;
+    if (!namespace || !language) return; // both are required fields, so the browser says so
     if (!files.length && !url) {
       log.replaceChildren(el("li", "error", "Choose a file, or enter a web address."));
       return;
@@ -846,7 +887,7 @@
       problem: file.size > MAX_UPLOAD_BYTES ? "larger than 200 MB, so it was skipped."
         : file.size === 0 ? "the file is empty." : null,
       send: async (report) => {
-        const job = await api("/jobs", { method: "POST", headers: json, body: JSON.stringify({ namespace, filename: file.name, size: file.size }) });
+        const job = await api("/jobs", { method: "POST", headers: json, body: JSON.stringify({ namespace, language, filename: file.name, size: file.size }) });
         await sendParts(job, file, report);
         await api("/jobs/" + job.id + "/finish", { method: "POST" });
         return followJob(job.id, report);
@@ -857,7 +898,7 @@
         label: shortUrl(url),
         fromUrl: true,
         send: async (report) => {
-          const job = await api("/jobs", { method: "POST", headers: json, body: JSON.stringify({ namespace, url }) });
+          const job = await api("/jobs", { method: "POST", headers: json, body: JSON.stringify({ namespace, language, url }) });
           return followJob(job.id, report);
         },
       });
@@ -874,7 +915,7 @@
       try {
         const result = await job.send((text) => { item.textContent = job.label + ": " + text; });
         const label = job.fromUrl ? result.file.filename + " (from " + job.label + ")" : job.label;
-        item.className = "ok";
+        item.className = result.warning ? "warn" : "ok"; // a warning: the passages are in, but not the book
         item.textContent = uploadMessage(label, result, namespace);
         uploaded++;
         if (job.fromUrl) urlInput.value = "";

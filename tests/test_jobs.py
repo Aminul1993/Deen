@@ -23,9 +23,10 @@ def wait_for(client, job_id, timeout=15):
     raise AssertionError(f"job {job_id} still {job['state']}")
 
 
-def send_file(client, namespace, filename, data):
+def send_file(client, namespace, filename, data, language=None):
     """The admin page's flow: start a job, send the parts, finish, wait."""
-    job = client.post("/admin/api/jobs", headers=AUTH, json={"namespace": namespace, "filename": filename, "size": len(data)}).json()
+    body = {"namespace": namespace, "filename": filename, "size": len(data), "language": language}
+    job = client.post("/admin/api/jobs", headers=AUTH, json=body).json()
     for offset in range(0, len(data), job["chunk_bytes"]):
         part = data[offset:offset + job["chunk_bytes"]]
         r = client.put(f"/admin/api/jobs/{job['id']}/data", headers=AUTH, params={"offset": offset}, content=part)

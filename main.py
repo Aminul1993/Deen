@@ -7,19 +7,24 @@ in the language of the question (English, Arabic, Bengali, ...). The public
 endpoints only read the index; the admin page (/admin, protected by ADMIN_TOKEN)
 can swap the Groq and Pinecone credentials and upload or delete files. The
 credentials are kept in a Redis database (db.py), not in the environment.
+Uploaded PDFs are also kept on disk, so they can be read page by page on /books.
 
 Run with:  uvicorn main:app --host 0.0.0.0 --port 8000
 Chat UI:   http://localhost:8000/  (static/index.html)
+Books UI:  http://localhost:8000/books  (static/books.html)
 Admin UI:  http://localhost:8000/admin  (static/admin.html)
 """
 
+import contextlib
 import io
 import ipaddress
 import itertools
 import logging
+import mimetypes
 import os
 import re
 import secrets
+import shutil
 import socket
 import threading
 import time
@@ -37,7 +42,7 @@ from typing import Any, BinaryIO, Callable, Deque, Dict, Iterable, List, Literal
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from groq import AuthenticationError as GroqAuthenticationError
 from groq import Groq
@@ -51,6 +56,7 @@ from pydantic import BaseModel, Field, field_validator
 
 import db
 import ingest
+import storage
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -92,6 +98,13 @@ HISTORY_PROMPT_CHARS = 1500  # each message is cut to this length in prompts
 STATIC_DIR = BASE_DIR / "static"
 CHAT_PAGE = STATIC_DIR / "index.html"
 ADMIN_PAGE = STATIC_DIR / "admin.html"
+BOOKS_PAGE = STATIC_DIR / "books.html"
+BOOKS_DIR = BASE_DIR / "data" / "books"  # uploaded PDFs, kept so they can be read on the books page
+
+# Languages an uploaded file can be marked with: code -> English name. The books page lists books in
+# the reader's chosen language first. The chat and books pages translate their own text into English,
+# Bengali and Arabic (static/i18n.js); a book can be in any of these.
+LANGUAGES: Dict[str, str] = {"en": "English", "bn": "Bengali", "ar": "Arabic", "ur": "Urdu"}
 
 # Admin uploads
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # a file sent in one request
@@ -105,6 +118,7 @@ UPSERT_BATCH = 50  # keeps each upsert well under Pinecone's 2 MB request limit
 DELETE_BATCH = 1000  # most ids Pinecone deletes per request
 RATE_LIMIT_RETRIES = 5  # for uploads only; a chat question fails fast instead
 NAMESPACE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}")
+FILE_ID_PATTERN = re.compile(r"[a-z0-9-]{1,40}-[0-9a-f]{12}")  # what ingest.file_id_for() makes
 FETCH_TIMEOUT_SECONDS = 30  # for downloading a file from a web address
 # File type to assume from a download's Content-Type when its address has no usable file name.
 CONTENT_TYPE_EXTENSIONS: Dict[str, str] = {
@@ -772,6 +786,7 @@ def retrieve(state: RAGState) -> Dict[str, Any]:
         "Retrieved %d/%d usable matches from %d namespace(s) for query of %d chars",
         len(sources), len(matches), len(targets), len(query),
     )
+    _link_books(res.settings.index_name, sources)
     return {"context": context, "sources": sources}
 
 
@@ -963,6 +978,7 @@ async def lifespan(_: FastAPI):
     if 0 < len(os.getenv("ADMIN_TOKEN", "").strip()) < MIN_ADMIN_TOKEN_CHARS:
         logger.error("ADMIN_TOKEN is shorter than %d characters, so the admin page stays off. Set a longer one.",
                      MIN_ADMIN_TOKEN_CHARS)
+    logger.info("Uploaded PDFs are kept as books %s", storage.describe())
     try:
         res = get_resources()
     except RAGError as exc:
@@ -982,7 +998,11 @@ app = FastAPI(
     description="Cited answers about Islam from the Quran and Hadith indexed in Pinecone, following the Hanafi madhhab.",
     lifespan=lifespan,
 )
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")  # chat page fonts
+# The books page loads pdf.js as JavaScript modules (.mjs) and WebAssembly; some systems, such as
+# Windows, don't map those extensions, and browsers refuse modules served with another type.
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("application/wasm", ".wasm")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")  # fonts, scripts and pdf.js
 
 
 @app.exception_handler(RAGError)
@@ -1213,6 +1233,204 @@ def read_passage(
 
 
 # --------------------------------------------------------------------------- #
+# Books: uploaded PDFs, read page by page on /books
+# --------------------------------------------------------------------------- #
+#
+# Every PDF uploaded on the admin page, from a file or a web address, is also kept: in Vercel Blob
+# when BLOB_READ_WRITE_TOKEN is set (storage.py), otherwise on this server's disk in BOOKS_DIR. The
+# books page (static/books.html) lists them and shows them one page at a time with pdf.js, and an
+# answer's sources link to the book and page a passage came from.
+#
+# A book's upload row says where it is: "book_url" is its Blob address, and a book without one is
+# on disk. So books kept on disk before Blob was set up are still served, from the disk.
+
+
+def book_title(filename: str) -> str:
+    """A book's title, from its file name: "Bahishti_Zewar.pdf" -> "Bahishti Zewar"."""
+    return PurePosixPath(filename).stem.replace("_", " ").strip() or filename
+
+
+def book_pdf_url(namespace: str, file_id: str) -> str:
+    return f"/books/{namespace}/{file_id}.pdf"
+
+
+def book_reader_url(namespace: str, file_id: str, page: Optional[int] = None) -> str:
+    """The books page, opened at this book (and page)."""
+    return "/books?" + urllib.parse.urlencode({"text": namespace, "book": file_id, **({"page": page} if page else {})})
+
+
+def _book_key(index_name: str, namespace: str, file_id: str) -> str:
+    """"<index>/<text>/<file id>.pdf": where a book goes, under BOOKS_DIR or books/ in Blob."""
+    # Pinecone index names are lowercase letters, digits and "-", but the setting itself is free text.
+    folder = re.sub(r"[^A-Za-z0-9_-]", "_", index_name) or "_"
+    return f"{folder}/{namespace}/{file_id}.pdf"
+
+
+def _book_path(index_name: str, namespace: str, file_id: str) -> Path:
+    return BOOKS_DIR / _book_key(index_name, namespace, file_id)
+
+
+def _save_book_to_disk(stream: BinaryIO, path: Path) -> None:
+    temporary = path.with_name(f"{path.name}.{secrets.token_hex(4)}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stream.seek(0)
+        with open(temporary, "wb") as copy:
+            shutil.copyfileobj(stream, copy, 1 << 20)
+        os.replace(temporary, path)  # all at once, so a reader never gets half a file
+    except OSError:
+        with contextlib.suppress(OSError):
+            temporary.unlink(missing_ok=True)
+        raise
+
+
+def _keep_book(stream: BinaryIO, index_name: str, namespace: str, file_id: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """Keep a copy of an uploaded PDF for the books page: in Vercel Blob if it's set up, else on disk.
+
+    Returns (kept, its Blob address or None, why it couldn't be kept or None). A failure is logged,
+    but doesn't undo the upload: the passages are stored and can be cited without the book.
+    """
+    key = _book_key(index_name, namespace, file_id)
+    if storage.enabled():
+        try:
+            return True, storage.upload("books/" + key, stream), None
+        except (storage.BlobError, ValueError) as exc:
+            logger.error("Could not keep %s in Vercel Blob: %s", key, exc)
+            return False, None, f"Vercel Blob refused it ({exc}). Check BLOB_READ_WRITE_TOKEN and BLOB_ACCESS."
+    try:
+        _save_book_to_disk(stream, BOOKS_DIR / key)
+        return True, None, None
+    except OSError as exc:
+        logger.exception("Could not keep %s on disk for the books page", key)
+        return False, None, f"It couldn't be saved on the server's disk ({exc.strerror or exc})."
+
+
+def _delete_book(index_name: str, row: Mapping[str, Any]) -> None:
+    """Delete an uploaded file's book, wherever it's kept. Logged, not raised, when that fails."""
+    url = row.get("book_url")
+    try:
+        if url:
+            storage.delete(url)
+        else:
+            _book_path(index_name, row["namespace"], row["file_id"]).unlink(missing_ok=True)
+    except (storage.BlobError, OSError):
+        logger.exception("Could not delete the book of %r from %r%s", row["file_id"], row["namespace"],
+                         f" ({url})" if url else "")
+
+
+def _is_book(index_name: str, row: Mapping[str, Any]) -> bool:
+    """The uploaded file was kept as a book, and (on disk) its PDF is still there.
+
+    A book in Blob is taken as there: asking Blob about every book would cost an API call each
+    time books are listed. If it's gone after all, opening it says so.
+    """
+    if not row.get("book"):
+        return False
+    return bool(row.get("book_url")) or _book_path(index_name, row["namespace"], row["file_id"]).is_file()
+
+
+def _index_name() -> str:
+    """The index whose books to show. Books need neither Pinecone nor Groq, only the setting."""
+    index_name = stored_settings().get("index_name")
+    if not index_name:
+        raise NotConfiguredError("Deen isn't set up yet: the Pinecone index name is missing. "
+                                 "An admin can enter it on the admin page.")
+    return index_name
+
+
+def _link_books(index_name: str, sources: List[Dict[str, Any]]) -> None:
+    """Link each source whose passage comes from an uploaded PDF to that book, at the passage's page."""
+    if not sources:
+        return
+    try:
+        books = {(row["namespace"], row["file_id"]): row for row in db.list_uploads(index_name) if row.get("book")}
+    except Exception:  # the answer matters more than the links
+        logger.warning("Could not read the list of books, so sources aren't linked to them", exc_info=True)
+        return
+    for source in sources:
+        file_id = source["id"].rpartition("#")[0]  # vector ids are "<file id>#<n>"
+        row = books.get((source["namespace"], file_id))
+        if row is None or not _is_book(index_name, row):
+            continue
+        page = source["metadata"].get("page")
+        page = page if isinstance(page, int) and not isinstance(page, bool) and page > 0 else None
+        source["book"] = {
+            "id": file_id, "text": source["namespace"], "title": book_title(row["filename"]),
+            "language": row.get("language"), "page": page,
+            "pdf": book_pdf_url(source["namespace"], file_id),
+            "url": book_reader_url(source["namespace"], file_id, page),
+        }
+
+
+class Book(BaseModel):
+    id: str = Field(..., description="The uploaded file's id.")
+    text: str = Field(..., description="The text (namespace) it was uploaded to.")
+    title: str = Field(..., description="From the file name.")
+    filename: str
+    language: Optional[str] = Field(None, description='Language code chosen when it was uploaded, e.g. "bn".')
+    pages: Optional[int] = None
+    size_bytes: int
+    uploaded_at: str
+    pdf: str = Field(..., description="Address of the PDF.")
+    url: str = Field(..., description="Address of the books page, opened at this book.")
+
+
+class BooksResponse(BaseModel):
+    languages: Dict[str, str] = Field(..., description="Language codes a book can have, with their English names.")
+    books: List[Book] = Field(..., description="By title.")
+
+
+@app.get("/books", include_in_schema=False)
+def books_page() -> FileResponse:
+    """Serve the books page: the list of books, and a reader that shows one page at a time."""
+    return FileResponse(BOOKS_PAGE, media_type="text/html")
+
+
+@app.get("/books/list", response_model=BooksResponse)
+def list_books() -> BooksResponse:
+    """The PDFs uploaded on the admin page, which can be read page by page on /books."""
+    index_name = _index_name()
+    books = [
+        Book(id=row["file_id"], text=row["namespace"], title=book_title(row["filename"]), filename=row["filename"],
+             language=row.get("language"), pages=row.get("pages"), size_bytes=row["size_bytes"],
+             uploaded_at=row["uploaded_at"], pdf=book_pdf_url(row["namespace"], row["file_id"]),
+             url=book_reader_url(row["namespace"], row["file_id"]))
+        for row in db.list_uploads(index_name) if _is_book(index_name, row)
+    ]
+    books.sort(key=lambda book: (book.title.casefold(), book.text))
+    return BooksResponse(languages=LANGUAGES, books=books)
+
+
+@app.get("/books/{text}/{file_id}.pdf", response_class=FileResponse)
+def book_pdf(text: str, file_id: str, request: Request) -> Response:
+    """A book's PDF. Range requests are supported, so a reader needn't download all of a large book.
+
+    A book in Vercel Blob is streamed through here, a requested range at a time, since a private
+    store can only be read with the token.
+    """
+    if not NAMESPACE_PATTERN.fullmatch(text) or not FILE_ID_PATTERN.fullmatch(file_id):
+        raise HTTPException(status_code=404, detail="There's no such book.")
+    index_name = _index_name()
+    row = db.get_upload(index_name, text, file_id)
+    if row is None or not _is_book(index_name, row):
+        raise HTTPException(status_code=404, detail="There's no such book.")
+    cache = {"Cache-Control": "public, max-age=86400"}  # the address names the content, which never changes
+    if not row.get("book_url"):
+        return FileResponse(_book_path(index_name, text, file_id), media_type="application/pdf",
+                            filename=row["filename"], content_disposition_type="inline", headers=cache)
+    try:
+        return storage.blob_response(row["book_url"], request.headers, row["filename"], extra_headers=cache)
+    except storage.BlobMissing:
+        logger.error("The book %r of %r is missing from Vercel Blob", file_id, text)
+        raise HTTPException(status_code=404, detail="This book is missing from storage. "
+                                                    "An admin may need to upload it again.") from None
+    except storage.BlobUnavailable as exc:
+        logger.error("Could not read the book %r of %r from Vercel Blob: %s", file_id, text, exc)
+        raise HTTPException(status_code=502, detail="The book couldn't be fetched from storage. "
+                                                    "Try again in a moment.") from None
+
+
+# --------------------------------------------------------------------------- #
 # Admin: swap credentials, upload and delete files
 # --------------------------------------------------------------------------- #
 
@@ -1295,12 +1513,16 @@ class UploadedFile(BaseModel):
     passages: int
     size_bytes: int
     uploaded_at: str
+    language: Optional[str] = Field(None, description="Language code chosen when it was uploaded.")
+    pages: Optional[int] = Field(None, description="A PDF's number of pages.")
+    book: bool = Field(False, description="The PDF is kept, and can be read on the books page.")
 
 
 class UploadResult(BaseModel):
     file: UploadedFile
     skipped_records: int = Field(..., description='Records without a "text" or "content" field.')
     replaced_versions: int = Field(0, description="Earlier versions of a file with the same name that were removed.")
+    warning: Optional[str] = Field(None, description="Why a PDF couldn't be kept as a book; its passages were still stored.")
 
 
 class FilesResponse(BaseModel):
@@ -1308,6 +1530,8 @@ class FilesResponse(BaseModel):
     total_vector_count: int
     namespaces: List[TextInfo]
     files: List[UploadedFile] = Field(..., description="Files uploaded from the admin page to this index.")
+    languages: Dict[str, str] = Field(..., description="Language codes a file can be marked with, and their names.")
+    book_storage: str = Field(..., description="Where uploaded PDFs are kept: \"in Vercel Blob (private store)\" or \"on this server's disk\".")
 
 
 def _require(values: Mapping[str, str], names: Tuple[str, ...]) -> None:
@@ -1429,7 +1653,7 @@ def _delete_vectors(index: Any, namespace: str, ids: List[str]) -> None:
 
 def _index_passages(res: Resources, namespace: str, file_id: str, filename: str,
                     passages: Iterable[ingest.Passage], earlier_copy: bool, source_url: Optional[str] = None,
-                    on_progress: Optional[Callable[[int], None]] = None) -> int:
+                    on_progress: Optional[Callable[[int], None]] = None, language: Optional[str] = None) -> int:
     """Embed passages and upsert them with ids "<file_id>#<n>", one batch at a time.
 
     passages can be a stream (ingest.FileReader): only one batch is in memory at a time, so a
@@ -1445,7 +1669,9 @@ def _index_passages(res: Resources, namespace: str, file_id: str, filename: str,
     if problem:
         raise AdminRequestError(problem)  # before any embedding tokens are spent
 
-    origin = {"source_file": filename, **({"source_url": source_url} if source_url else {})}
+    # A record's own fields win over these, e.g. a "language" field in a .jsonl line.
+    origin = {"source_file": filename, **({"language": language} if language else {}),
+              **({"source_url": source_url} if source_url else {})}
     remaining = iter(passages)
     written = 0
     try:
@@ -1491,7 +1717,10 @@ def admin_list_files() -> FilesResponse:
         index=res.settings.index_name,
         total_vector_count=stats["total_vector_count"],
         namespaces=[TextInfo(namespace=ns, vector_count=n) for ns, n in sorted(stats["namespaces"].items())],
-        files=[UploadedFile(**row) for row in db.list_uploads(res.settings.index_name)],
+        files=[UploadedFile(**{**row, "book": _is_book(res.settings.index_name, row)})
+               for row in db.list_uploads(res.settings.index_name)],
+        languages=LANGUAGES,
+        book_storage=storage.describe(),
     )
 
 
@@ -1505,15 +1734,24 @@ def _valid_namespace(namespace: str) -> str:
     return namespace
 
 
+def _valid_language(language: Optional[str]) -> Optional[str]:
+    """A language code from LANGUAGES, or None when none was chosen."""
+    language = (language or "").strip()
+    if language and language not in LANGUAGES:
+        raise HTTPException(status_code=422, detail=f"The language must be one of: {', '.join(LANGUAGES)}.")
+    return language or None
+
+
 def _too_big(limit: int) -> HTTPException:
     return HTTPException(status_code=413, detail=f"Files can be at most {limit // 2**20} MB.")
 
 
 def _store_upload(namespace: str, filename: str, stream: BinaryIO, size: int, source_url: Optional[str] = None,
-                  on_progress: Optional[Callable[[int], None]] = None) -> UploadResult:
+                  on_progress: Optional[Callable[[int], None]] = None, language: Optional[str] = None) -> UploadResult:
     """Split a file into passages, embed them and add them to a namespace (created if it's new).
 
-    stream is read as passages are needed, so it can be a large file on disk.
+    stream is read as passages are needed, so it can be a large file on disk. A PDF is also kept,
+    once its passages are stored, so it can be read on the books page.
     """
     try:
         reader = ingest.FileReader(filename, stream, size)
@@ -1527,11 +1765,22 @@ def _store_upload(namespace: str, filename: str, stream: BinaryIO, size: int, so
     earlier = [f for f in db.list_uploads(index_name)
                if f["namespace"] == namespace and (f["file_id"] == file_id or f["filename"] == filename)]
     stored = _index_passages(res, namespace, file_id, filename, reader, source_url=source_url, on_progress=on_progress,
-                             earlier_copy=any(f["file_id"] == file_id for f in earlier))
+                             earlier_copy=any(f["file_id"] == file_id for f in earlier), language=language)
+    book, book_url, warning = False, None, None
+    if reader.extension == ".pdf":
+        book, book_url, problem = _keep_book(stream, index_name, namespace, file_id)
+        same_file = next((f for f in earlier if f["file_id"] == file_id and _is_book(index_name, f)), None)
+        if not book and same_file:  # this exact file is already kept: that copy still serves
+            book, book_url, problem = True, same_file.get("book_url"), None
+        warning = f"The PDF couldn't be kept as a book, so it can't be read on the books page: {problem}" if problem else None
 
     # The new version takes the place of the earlier ones, including their position in a reader.
     first_upload = min((f["uploaded_at"] for f in earlier), default=None)
-    row = db.save_upload(index_name, namespace, file_id, filename, stored, size, uploaded_at=first_upload)
+    row = db.save_upload(index_name, namespace, file_id, filename, stored, size, uploaded_at=first_upload,
+                         language=language, pages=reader.page_count, book=book, book_url=book_url)
+    for old in earlier:  # this same file uploaded before: its book's earlier copy, if it's elsewhere
+        if old["file_id"] == file_id and old.get("book") and old.get("book_url") != book_url:
+            _delete_book(index_name, old)
     replaced = 0
     for old in (f for f in earlier if f["file_id"] != file_id):
         try:
@@ -1540,19 +1789,24 @@ def _store_upload(namespace: str, filename: str, stream: BinaryIO, size: int, so
             logger.exception("Could not delete the earlier version %r of %r", old["file_id"], filename)
             continue  # it stays in the list, so it can be deleted by hand
         db.delete_upload(index_name, namespace, old["file_id"])
+        _delete_book(index_name, old)
         replaced += 1
     logger.info("Admin uploaded %r to %r: %d passages, replacing %d earlier version(s)", filename, namespace, stored, replaced)
-    return UploadResult(file=UploadedFile(**row), skipped_records=reader.skipped_records, replaced_versions=replaced)
+    return UploadResult(file=UploadedFile(**row), skipped_records=reader.skipped_records, replaced_versions=replaced,
+                        warning=warning)
 
 
 @admin_api.post("/files", response_model=UploadResult)
-def admin_upload_file(file: UploadFile = File(...), namespace: str = Form(...)) -> UploadResult:
+def admin_upload_file(file: UploadFile = File(...), namespace: str = Form(...),
+                      language: Optional[str] = Form(None)) -> UploadResult:
     """Upload a file of up to MAX_UPLOAD_BYTES in one request. The admin page uses /jobs instead, for any size."""
     namespace = _valid_namespace(namespace)
+    language = _valid_language(language)
     data = file.file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         raise _too_big(MAX_UPLOAD_BYTES)
-    return _store_upload(namespace, ingest.clean_filename(file.filename or ""), io.BytesIO(data), len(data))
+    return _store_upload(namespace, ingest.clean_filename(file.filename or ""), io.BytesIO(data), len(data),
+                         language=language)
 
 
 # --- Upload from a web address ----------------------------------------------
@@ -1561,6 +1815,7 @@ def admin_upload_file(file: UploadFile = File(...), namespace: str = Form(...)) 
 class UrlUpload(BaseModel):
     url: str = Field(..., max_length=2000, description="A direct http(s) link to a .txt, .md, .pdf, .json, .jsonl or .csv file.")
     namespace: str
+    language: Optional[str] = Field(None, description='The file\'s language, a code from LANGUAGES such as "bn".')
 
 
 def _public_url(url: str) -> urllib.parse.SplitResult:
@@ -1668,10 +1923,11 @@ def admin_upload_from_url(upload: UrlUpload) -> UploadResult:
     The admin page uses /jobs instead, which downloads larger files in the background.
     """
     namespace = _valid_namespace(upload.namespace)
+    language = _valid_language(upload.language)
     filename, data = fetch_url(upload.url)
     source = _shareable(upload.url)
     logger.info("Admin downloaded %r from %s", filename, source)
-    return _store_upload(namespace, filename, io.BytesIO(data), len(data), source_url=source)
+    return _store_upload(namespace, filename, io.BytesIO(data), len(data), source_url=source, language=language)
 
 
 # --- Large uploads: sent in parts, or downloaded, then processed in the background ---------
@@ -1692,6 +1948,7 @@ class JobStart(BaseModel):
     filename: Optional[str] = Field(None, max_length=255, description="For a file sent in parts.")
     size: Optional[int] = Field(None, ge=1, description="The file's size in bytes, for a file sent in parts.")
     url: Optional[str] = Field(None, max_length=2000, description="A direct link to download instead.")
+    language: Optional[str] = Field(None, description='The file\'s language, a code from LANGUAGES such as "bn".')
 
 
 class JobStatus(BaseModel):
@@ -1763,7 +2020,8 @@ def _run_job(job_id: str, url: Optional[str]) -> None:
         assert job is not None
         with open(path, "rb") as stream:
             result = _store_upload(job["namespace"], job["filename"], stream, job["size"], source_url=job["source_url"],
-                                   on_progress=lambda stored: db.update_job(job_id, passages=stored))
+                                   on_progress=lambda stored: db.update_job(job_id, passages=stored),
+                                   language=job["language"])
         db.update_job(job_id, state="done", passages=result.file.passages, result=result.model_dump_json())
     except HTTPException as exc:
         db.update_job(job_id, state="failed", error=_error_text(exc.detail))
@@ -1787,11 +2045,12 @@ def _start_job(job_id: str, url: Optional[str] = None) -> None:
 def admin_start_job(start: JobStart) -> JobStatus:
     """Start a large upload: a file to be sent in parts, or a web address to download in the background."""
     namespace = _valid_namespace(start.namespace)
+    language = _valid_language(start.language)
     _forget_old_jobs()
     job_id = secrets.token_urlsafe(16)
     if start.url:
         _public_url(start.url)  # refuse a bad address now, rather than in the background
-        db.create_job(job_id, namespace, "downloading", source_url=_shareable(start.url))
+        db.create_job(job_id, namespace, "downloading", source_url=_shareable(start.url), language=language)
         logger.info("Admin started downloading %s", _shareable(start.url))
         _start_job(job_id, start.url.strip())
     else:
@@ -1807,7 +2066,7 @@ def admin_start_job(start: JobStart) -> JobStatus:
         path = _part_path(job_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"")
-        db.create_job(job_id, namespace, "receiving", filename=filename, size=start.size)
+        db.create_job(job_id, namespace, "receiving", filename=filename, size=start.size, language=language)
     return _job_status(_job(job_id))
 
 
@@ -1860,7 +2119,7 @@ def admin_job_status(job_id: str) -> JobStatus:
 
 @admin_api.delete("/files/{file_id}")
 def admin_delete_file(file_id: str, namespace: str = Query(...)) -> Dict[str, int]:
-    """Delete an uploaded file's passages from Pinecone."""
+    """Delete an uploaded file's passages from Pinecone, and its PDF from the books page."""
     res = get_resources()
     entry = db.get_upload(res.settings.index_name, namespace, file_id)
     if entry is None:
@@ -1871,6 +2130,7 @@ def admin_delete_file(file_id: str, namespace: str = Query(...)) -> Dict[str, in
         logger.exception("Could not delete %r from %r", file_id, namespace)
         raise HTTPException(status_code=502, detail="Pinecone couldn't delete the file. Try again in a moment.") from exc
     db.delete_upload(res.settings.index_name, namespace, file_id)
+    _delete_book(res.settings.index_name, entry)
     logger.info("Admin deleted %r from %r: %d passages", entry["filename"], namespace, entry["passages"])
     return {"deleted_passages": entry["passages"]}
 
