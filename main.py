@@ -26,6 +26,7 @@ import re
 import secrets
 import shutil
 import socket
+import tempfile
 import threading
 import time
 import urllib.error
@@ -109,10 +110,11 @@ LANGUAGES: Dict[str, str] = {"en": "English", "bn": "Bengali", "ar": "Arabic", "
 # Admin uploads
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # a file sent in one request
 MAX_LARGE_UPLOAD_BYTES = 200 * 1024 * 1024  # a file sent in parts, or downloaded, and processed in the background
-UPLOAD_CHUNK_BYTES = 5 * 1024 * 1024  # size of each part the admin page sends
+UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024  # size of each part the admin page sends; Vercel refuses bodies over 4.5 MB
 JOB_KEEP_HOURS = 24  # finished or abandoned large uploads are forgotten after this
 JOB_STALLED_MINUTES = 10  # a background upload with no progress for this long has died with its server
-PARTS_DIR = Path(__file__).resolve().parent / "data" / "upload-parts"  # large uploads, until their job ends
+# Large uploads, until their job ends. On Vercel the app's folder is read-only and only /tmp can be written.
+PARTS_DIR = (Path(tempfile.gettempdir()) if os.getenv("VERCEL") else BASE_DIR / "data") / "upload-parts"
 EMBED_BATCH = 96  # most inputs Pinecone Inference accepts per request for multilingual-e5-large
 UPSERT_BATCH = 50  # keeps each upsert well under Pinecone's 2 MB request limit
 DELETE_BATCH = 1000  # most ids Pinecone deletes per request
