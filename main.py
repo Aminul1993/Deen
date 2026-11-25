@@ -1,4 +1,4 @@
-"""Deen: Quran and Hadith Q&A API (FastAPI + LangGraph + Pinecone + Groq).
+"""Deen: Quran and Hadith Q&A API (FastAPI + Pinecone + Groq).
 
 Answers questions from an Islamic perspective, following the Hanafi madhhab,
 using Quran and Hadith passages that are already indexed in a single Pinecone
@@ -44,17 +44,15 @@ from typing import (Any, BinaryIO, Callable, Deque, Dict, Iterable, Iterator, Li
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from groq import AuthenticationError as GroqAuthenticationError
 from groq import Groq
 from groq import NotFoundError as GroqNotFoundError
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
-from langgraph.graph import END, START, StateGraph
 from pinecone import Pinecone
 from pinecone.exceptions import NotFoundException, UnauthorizedException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 import db
 import ingest
@@ -79,6 +77,7 @@ logger = logging.getLogger("scripture_rag")
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"  # Groq retired llama-3.3-70b-versatile in 2026
 DEFAULT_EMBEDDING_MODEL = "multilingual-e5-large"
 LLM_TEMPERATURE = 0.1  # low creativity, high factual adherence
+GROQ_TIMEOUT_SECONDS = 30  # per attempt, with one retry: a slow Groq mustn't hold a worker thread for minutes
 
 ALL_NAMESPACES = "all"
 DEFAULT_TOP_K = 5
@@ -90,6 +89,9 @@ EXCERPT_CHARS = 300
 MAX_PARALLEL_NAMESPACE_QUERIES = 8
 STATS_TTL_SECONDS = 60  # how long the chat reuses index statistics (namespaces, dimension)
 QUERY_LIMIT_PER_MINUTE = 20  # questions per visitor (IP address) per minute
+# Questions answered at once by one process. Each holds one of the 40 threads that also serve the pages,
+# fonts and books, so the rest are turned away (503) rather than queued, and the site keeps loading.
+MAX_PARALLEL_QUESTIONS = 20
 MIN_ADMIN_TOKEN_CHARS = 24  # shorter tokens can be guessed, so they leave the admin page off
 
 # Conversation history sent by the client (the API itself stores nothing).
@@ -115,8 +117,7 @@ UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024  # size of each part the admin page sends; 
 JOB_KEEP_HOURS = 24  # finished or abandoned large uploads are forgotten after this
 JOB_STALLED_MINUTES = 10  # a background upload with no progress for this long has died with its server
 FILE_LOCK_SECONDS = 15 * 60  # a file's upload, OCR retry or delete holds it this long, renewed while it goes on
-# Large uploads, until their job ends. On Vercel the app's folder is read-only and only /tmp can be written.
-PARTS_DIR = (Path(tempfile.gettempdir()) if os.getenv("VERCEL") else BASE_DIR / "data") / "upload-parts"
+PARTS_DIR = BASE_DIR / "data" / "upload-parts"  # large uploads, until their job ends
 EMBED_BATCH = 96  # most inputs Pinecone Inference accepts per request for multilingual-e5-large
 UPSERT_BATCH = 50  # keeps each upsert well under Pinecone's 2 MB request limit
 DELETE_BATCH = 1000  # most ids Pinecone deletes per request
@@ -260,7 +261,7 @@ class Resources:
     settings: Settings
     pc: Pinecone
     index: Any
-    llm: ChatGroq
+    llm: Groq
 
 
 # Settings kept in the database: name -> what the admin page calls it.
@@ -350,14 +351,15 @@ def connect_pinecone(api_key: str, index_name: str) -> Tuple[Pinecone, Any]:
     return pc, pc.Index(index_name)
 
 
-def make_llm(settings: Settings) -> ChatGroq:
-    return ChatGroq(
-        model=settings.groq_model,
-        temperature=LLM_TEMPERATURE,
-        api_key=settings.groq_api_key,
-        max_retries=2,
-        timeout=60,
-    )
+def make_llm(settings: Settings) -> Groq:
+    return Groq(api_key=settings.groq_api_key, timeout=GROQ_TIMEOUT_SECONDS, max_retries=1)
+
+
+def chat(res: Resources, messages: List[Dict[str, str]]) -> str:
+    """The model's reply to messages ({"role": "system" | "user" | "assistant", "content": ...})."""
+    response = res.llm.chat.completions.create(model=res.settings.groq_model, temperature=LLM_TEMPERATURE,
+                                               messages=messages)
+    return (response.choices[0].message.content or "").strip()
 
 
 _resources: Optional[Resources] = None
@@ -367,7 +369,7 @@ _resources_lock = threading.Lock()
 def get_resources() -> Resources:
     """The Pinecone and Groq clients for the stored settings. Failures are not cached.
 
-    The settings are read from the database on every call (a fast local read), and the clients
+    The settings are read from the database on every call (one round trip), and the clients
     are rebuilt when they changed. So a credentials swap on the admin page reaches every worker
     process, not only the one that saved it. Requests already running keep their clients.
     """
@@ -621,13 +623,18 @@ def format_reference(namespace: str, fields: Dict[str, Any]) -> str:
 
 
 def _base_reference(namespace: str, fields: Dict[str, Any]) -> str:
+    surah, ayah = fields.get("surah"), fields.get("ayah")
     collection = _display(fields["collection"]) if "collection" in fields else None
-    work = collection or (_display(fields["title"]) if "title" in fields else display_name(namespace))
+    if collection:
+        work = collection
+    elif surah is not None:
+        work = "Quran"  # a surah is cited as the Quran's, not by a dua's title or the text's name
+    else:
+        work = _display(fields["title"]) if "title" in fields else display_name(namespace)
     book = _display(fields["book"]) if "book" in fields else None
     if book == work:
         book = None  # avoid "Genesis (Genesis 1:1)"
     chapter, verse = fields.get("chapter"), fields.get("verse")
-    surah, ayah = fields.get("surah"), fields.get("ayah")
     hadith_number = fields.get("hadith_number")
 
     if surah is None and (collection is not None or hadith_number is not None):
@@ -670,7 +677,7 @@ def _context_block(number: int, reference: str, namespace: str, score: float,
 
 
 # --------------------------------------------------------------------------- #
-# LangGraph
+# Answering a question: condense -> retrieve -> generate
 # --------------------------------------------------------------------------- #
 
 
@@ -689,24 +696,23 @@ def _speaker(role: str) -> str:
     return "User" if role == "user" else "Assistant"
 
 
-def condense(state: RAGState) -> Dict[str, Any]:
+def condense(res: Resources, state: RAGState) -> Dict[str, Any]:
     """Rewrite a follow-up ("tell me more") into a standalone question for retrieval."""
     query = state["query"].strip()
     history = state.get("history") or []
     if not history:
         return {"search_query": query}
 
-    res = get_resources()
     transcript = "\n\n".join(
         f"{_speaker(m['role'])}: {_truncate(m['content'].strip(), HISTORY_PROMPT_CHARS)}" for m in history
     )
     prompt = f"Conversation:\n{transcript}\n\nLatest question:\n{query}\n\nStandalone question:"
     try:
-        response = res.llm.invoke([SystemMessage(content=CONDENSE_PROMPT), HumanMessage(content=prompt)])
+        rewritten = chat(res, [{"role": "system", "content": CONDENSE_PROMPT}, {"role": "user", "content": prompt}])
     except Exception as exc:
         raise GenerationError("The language model request to Groq failed while reading the conversation.") from exc
 
-    rewritten = _message_text(response).strip().strip("\"'“”").strip()
+    rewritten = rewritten.strip("\"'“”").strip()
     if not rewritten:
         logger.warning("Follow-up rewrite returned nothing; searching with the question as asked")
         rewritten = query
@@ -716,8 +722,7 @@ def condense(state: RAGState) -> Dict[str, Any]:
     return {"search_query": rewritten}
 
 
-def retrieve(state: RAGState) -> Dict[str, Any]:
-    res = get_resources()
+def retrieve(res: Resources, state: RAGState) -> Dict[str, Any]:
     query = (state.get("search_query") or state["query"]).strip()
     top_k = min(max(int(state.get("top_k") or DEFAULT_TOP_K), 1), MAX_TOP_K)
     requested = normalize_namespace(state.get("namespace"))
@@ -834,26 +839,12 @@ def _no_context_answer(namespace: Optional[str], question: str) -> str:
     )
 
 
-def _message_text(message: Any) -> str:
-    content = getattr(message, "content", message)
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):  # content blocks
-        return "".join(
-            part if isinstance(part, str) else str(part.get("text", ""))
-            for part in content
-            if isinstance(part, (str, dict))
-        )
-    return str(content or "")
-
-
-def generate(state: RAGState) -> Dict[str, Any]:
+def generate(res: Resources, state: RAGState) -> Dict[str, Any]:
     context = state.get("context") or []
     query = state["query"].strip()
     if not context:
         return {"answer": _no_context_answer(normalize_namespace(state.get("namespace")), query)}
 
-    res = get_resources()
     search_query = (state.get("search_query") or "").strip()
     interpreted = (
         f"In the context of this conversation, the question means:\n{search_query}\n\n"
@@ -865,34 +856,17 @@ def generate(state: RAGState) -> Dict[str, Any]:
         f"Retrieved excerpts ({len(context)}):\n\n" + "\n\n".join(context) + "\n\n"
         f"Answer the question in {language}, using only these excerpts and following every rule above."
     )
-    earlier: List[BaseMessage] = [
-        (HumanMessage if m["role"] == "user" else AIMessage)(content=_truncate(m["content"].strip(), HISTORY_PROMPT_CHARS))
-        for m in state.get("history") or []
-    ]
+    earlier = [{"role": m["role"], "content": _truncate(m["content"].strip(), HISTORY_PROMPT_CHARS)}
+               for m in state.get("history") or []]
     try:
-        response = res.llm.invoke([SystemMessage(content=SYSTEM_PROMPT), *earlier, HumanMessage(content=user_prompt)])
+        answer = chat(res, [{"role": "system", "content": SYSTEM_PROMPT}, *earlier,
+                            {"role": "user", "content": user_prompt}])
     except Exception as exc:
         raise GenerationError("The language model request to Groq failed.") from exc
 
-    answer = _message_text(response).strip()
     if not answer:
         raise GenerationError("The language model returned an empty answer.")
     return {"answer": answer}
-
-
-def build_graph():
-    builder = StateGraph(RAGState)
-    builder.add_node("condense", condense)
-    builder.add_node("retrieve", retrieve)
-    builder.add_node("generate", generate)
-    builder.add_edge(START, "condense")
-    builder.add_edge("condense", "retrieve")
-    builder.add_edge("retrieve", "generate")
-    builder.add_edge("generate", END)
-    return builder.compile()
-
-
-rag_graph = build_graph()
 
 
 # --------------------------------------------------------------------------- #
@@ -968,6 +942,12 @@ class TextInfo(BaseModel):
     namespace: str
     vector_count: int
 
+    @computed_field
+    @property
+    def name(self) -> str:
+        """The text's name for people, e.g. "Sahih Bukhari" for sahih_bukhari."""
+        return display_name(self.namespace)
+
 
 class TextsResponse(BaseModel):
     index: str
@@ -1018,32 +998,32 @@ async def rag_error_handler(_: Request, exc: RAGError) -> JSONResponse:
 
 
 _recent_questions: Dict[str, Deque[float]] = {}
-_questions_lock = threading.Lock()
+_question_slots = threading.BoundedSemaphore(MAX_PARALLEL_QUESTIONS)
 
 
-def limit_questions(request: Request) -> None:
+async def limit_questions(request: Request) -> None:
     """Allow each visitor QUERY_LIMIT_PER_MINUTE questions a minute, so one script can't use up the quotas.
 
-    Counts are kept per process. Behind a reverse proxy, run uvicorn with --proxy-headers and
-    --forwarded-allow-ips so request.client is the visitor, not the proxy.
+    It's async, so it runs on the event loop: turning a question away takes no worker thread, and no
+    lock is needed. Counts are kept per process. Behind a reverse proxy, run uvicorn with
+    --proxy-headers and --forwarded-allow-ips so request.client is the visitor, not the proxy.
     """
     visitor = request.client.host if request.client else "unknown"
     now = time.monotonic()
-    with _questions_lock:
-        if len(_recent_questions) > 10_000:  # forget visitors who have been quiet for a minute
-            for key in [k for k, times in _recent_questions.items() if now - times[-1] > 60]:
-                del _recent_questions[key]
-        times = _recent_questions.setdefault(visitor, deque())
-        while times and now - times[0] > 60:
-            times.popleft()
-        if len(times) >= QUERY_LIMIT_PER_MINUTE:
-            wait = int(60 - (now - times[0])) + 1
-            raise HTTPException(
-                status_code=429,
-                detail=f"That's a lot of questions in one minute. Please wait {wait} seconds, then ask again.",
-                headers={"Retry-After": str(wait)},
-            )
-        times.append(now)
+    if len(_recent_questions) > 10_000:  # forget visitors who have been quiet for a minute
+        for key in [k for k, times in _recent_questions.items() if now - times[-1] > 60]:
+            del _recent_questions[key]
+    times = _recent_questions.setdefault(visitor, deque())
+    while times and now - times[0] > 60:
+        times.popleft()
+    if len(times) >= QUERY_LIMIT_PER_MINUTE:
+        wait = int(60 - (now - times[0])) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"That's a lot of questions in one minute. Please wait {wait} seconds, then ask again.",
+            headers={"Retry-After": str(wait)},
+        )
+    times.append(now)
 
 
 @app.get("/", include_in_schema=False)
@@ -1075,22 +1055,27 @@ def list_texts() -> TextsResponse:
 
 @app.post("/query", response_model=QueryResponse, dependencies=[Depends(limit_questions)])
 def query_texts(request: QueryRequest) -> QueryResponse:
-    initial: RAGState = {
-        "query": request.query,
-        "history": [m.model_dump() for m in request.history],
-        "search_query": "",
-        "namespace": request.namespace,
-        "top_k": request.top_k,
-        "context": [],
-        "sources": [],
-        "answer": "",
-    }
-    result = rag_graph.invoke(initial)  # a RAGError becomes its HTTP status in rag_error_handler
-    return QueryResponse(
-        answer=result["answer"],
-        search_query=result.get("search_query") or request.query,
-        sources=result.get("sources") or [],
-    )
+    if not _question_slots.acquire(blocking=False):
+        raise HTTPException(status_code=503, headers={"Retry-After": "10"},
+                            detail="Deen is answering a lot of questions right now. Please try again in a moment.")
+    try:
+        res = get_resources()  # once, so a question reads the settings from the database once
+        state: RAGState = {
+            "query": request.query,
+            "history": [m.model_dump() for m in request.history],
+            "search_query": "",
+            "namespace": request.namespace,
+            "top_k": request.top_k,
+            "context": [],
+            "sources": [],
+            "answer": "",
+        }
+        for step in (condense, retrieve, generate):  # a RAGError becomes its HTTP status in rag_error_handler
+            state.update(step(res, state))
+    finally:
+        _question_slots.release()
+    return QueryResponse(answer=state["answer"], search_query=state["search_query"] or request.query,
+                         sources=state["sources"])
 
 
 # --------------------------------------------------------------------------- #
@@ -1153,7 +1138,8 @@ def _reader_item(position: int, metadata: Dict[str, Any]) -> Optional[ReaderItem
         return None
     citation, citation_keys = extract_citation(metadata)
     fields: Dict[str, str] = {}
-    shown = set(TEXT_KEYS) | set(CITATION_FIELDS["title"])  # metadata keys with their own place
+    # Metadata keys with their own place, and the upload's language code, which isn't for readers.
+    shown = set(TEXT_KEYS) | set(CITATION_FIELDS["title"]) | {"language"}
     for name, keys in READER_FIELDS.items():
         for key in keys:
             value = _clean_value(metadata.get(key))
@@ -1164,13 +1150,9 @@ def _reader_item(position: int, metadata: Dict[str, Any]) -> Optional[ReaderItem
     if fields.get("arabic") == text:
         del fields["arabic"]  # the text itself is the Arabic
     title = citation.pop("title", None)
-    # A citation needs a work's name: the collection for a hadith, the Quran for surah and ayah.
-    if "collection" in citation:
-        reference = format_reference("", citation)
-    elif "surah" in citation:
-        reference = format_reference("quran", citation)
-    else:
-        reference = None  # numbers without a work's name would read as e.g. "Namaz 3": list them below instead
+    # A citation needs a work's name: the collection for a hadith, the Quran for surah and ayah. Numbers
+    # without one would read as e.g. "Namaz 3": they're listed with the other details instead.
+    reference = format_reference("", citation) if "collection" in citation or "surah" in citation else None
     if reference is not None:
         shown |= citation_keys
     details = {
@@ -1378,6 +1360,12 @@ class Book(BaseModel):
     pdf: str = Field(..., description="Address of the PDF.")
     url: str = Field(..., description="Address of the books page, opened at this book.")
 
+    @computed_field
+    @property
+    def text_name(self) -> str:
+        """The text's name for people, e.g. "Fiqh"."""
+        return display_name(self.text)
+
 
 class BooksResponse(BaseModel):
     languages: Dict[str, str] = Field(..., description="Language codes a book can have, with their English names.")
@@ -1522,6 +1510,12 @@ class UploadedFile(BaseModel):
     book: bool = Field(False, description="The PDF is kept, and can be read on the books page.")
     pending_pages: List[int] = Field(default_factory=list, description=(
         "A PDF's pages without readable text that OCR couldn't read yet. POST /files/{id}/ocr reads them again."))
+
+    @computed_field
+    @property
+    def text_name(self) -> str:
+        """The text's name for people, e.g. "Sahih Bukhari"."""
+        return display_name(self.namespace)
 
 
 class UploadResult(BaseModel):
@@ -2017,7 +2011,8 @@ def admin_upload_from_url(upload: UrlUpload) -> UploadResult:
 # A web address is a job too: POST /jobs {namespace, url} downloads it in the background.
 # Parts are written to a file next to the database; job state is in the database, so any worker
 # process can take parts or report progress. Processing runs in a thread of the process that
-# started it, and is reported as failed if that process stops.
+# started it, and is reported as failed if that process stops. That needs a server that keeps
+# running between requests, so on Vercel jobs are refused (see _refuse_on_vercel).
 
 
 class JobStart(BaseModel):
@@ -2045,6 +2040,16 @@ class JobStatus(BaseModel):
 
 
 _parts_lock = threading.Lock()  # one part appended at a time
+
+
+def _refuse_on_vercel() -> None:
+    """Refuse background work on Vercel, which stops a function after at most 800 seconds and keeps no
+    files between requests, so a large upload or an OCR retry would be cut off partway."""
+    if os.getenv("VERCEL"):
+        raise HTTPException(status_code=503, detail=(
+            "Uploads are processed in the background, and Vercel stops that after a few minutes. Upload from "
+            "Deen running on a normal server or your own computer, with the same .env: it uses the same "
+            "database, index and book store, so the files appear here too."))
 
 
 def _part_path(job_id: str) -> Path:
@@ -2206,6 +2211,7 @@ def _run_ocr_retry(job_id: str, index_name: str, namespace: str, file_id: str, r
 @admin_api.post("/files/{file_id}/ocr", response_model=JobStatus)
 def admin_retry_ocr(file_id: str, namespace: str = Query(...)) -> JobStatus:
     """Read the pages of an uploaded PDF that OCR couldn't read yet, in the background (see GET /jobs/{id})."""
+    _refuse_on_vercel()
     index_name = get_resources().settings.index_name
     row = db.get_upload(index_name, namespace, file_id)
     if row is None:
@@ -2233,6 +2239,7 @@ def _start_job(job_id: str, url: Optional[str] = None) -> None:
 @admin_api.post("/jobs", response_model=JobStatus)
 def admin_start_job(start: JobStart) -> JobStatus:
     """Start a large upload: a file to be sent in parts, or a web address to download in the background."""
+    _refuse_on_vercel()
     namespace = _valid_namespace(start.namespace)
     language = _valid_language(start.language)
     _forget_old_jobs()
@@ -2264,15 +2271,22 @@ async def admin_job_data(job_id: str, request: Request, offset: int = Query(...,
     """Append the part of the file that starts at byte offset.
 
     A part that doesn't start where the last one ended gets a 409 saying how much has arrived,
-    so a client can resend from there after a dropped connection.
+    so a client can resend from there after a dropped connection. It's async only to read the body;
+    the database calls and the disk write run in a worker thread, so they never stall other requests.
     """
-    job = _job(job_id)
+    job = await run_in_threadpool(_job, job_id)
     if job["state"] != "receiving":
         raise HTTPException(status_code=409, detail="This upload isn't waiting for data any more.")
     data = await request.body()
     if len(data) > UPLOAD_CHUNK_BYTES:
         raise HTTPException(status_code=413, detail=f"Send at most {UPLOAD_CHUNK_BYTES // 2**20} MB per part.")
-    path = _part_path(job_id)
+    received = await run_in_threadpool(_append_part, job, offset, data)
+    return _job_status({**job, "received": received})
+
+
+def _append_part(job: Mapping[str, Any], offset: int, data: bytes) -> int:
+    """Append a part to the job's file and return how many bytes have arrived."""
+    path = _part_path(job["id"])
     with _parts_lock:
         received = path.stat().st_size if path.exists() else 0
         if offset != received:
@@ -2283,8 +2297,8 @@ async def admin_job_data(job_id: str, request: Request, offset: int = Query(...,
         with open(path, "ab") as part:
             part.write(data)
         received += len(data)
-    db.update_job(job_id, received=received)
-    return _job_status({**job, "received": received})
+    db.update_job(job["id"], received=received)
+    return received
 
 
 @admin_api.post("/jobs/{job_id}/finish", response_model=JobStatus)

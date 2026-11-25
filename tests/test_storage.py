@@ -146,7 +146,7 @@ def test_pdfs_are_kept_in_blob_and_read_through_the_app(client, blob_store):
 
     state = {"query": "patience", "history": [], "search_query": "patience", "namespace": "fiqh", "top_k": 5,
              "context": [], "sources": [], "answer": ""}
-    assert all(s["book"]["id"] == file_id for s in main.retrieve(state)["sources"])  # answers link to it
+    assert all(s["book"]["id"] == file_id for s in main.retrieve(main.get_resources(), state)["sources"])  # answers link to it
 
     assert client.delete(f"/admin/api/files/{file_id}", headers=AUTH, params={"namespace": "fiqh"}).status_code == 200
     assert blob_store.calls[-1] == ("delete", row["book_url"]) and not blob_store.files

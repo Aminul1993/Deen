@@ -25,8 +25,6 @@ PREFIX = "deen:"
 SETTINGS_KEY = PREFIX + "settings"
 JOBS_KEY = PREFIX + "jobs"
 
-JOB_STATES_FINISHED = ("done", "failed")
-
 JOB_FIELDS = ("id", "namespace", "filename", "source_url", "language", "size", "received", "state", "passages",
               "pages", "pages_read", "ocr_pages", "result", "error", "created_at", "updated_at")
 

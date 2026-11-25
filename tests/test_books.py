@@ -121,7 +121,7 @@ def test_sources_link_to_the_page_of_their_book(client):
 
     state = {"query": "patience", "history": [], "search_query": "patience", "namespace": "fiqh", "top_k": 5,
              "context": [], "sources": [], "answer": ""}
-    sources = main.retrieve(state)["sources"]
+    sources = main.retrieve(main.get_resources(), state)["sources"]
     books = {s["metadata"]["page"]: s["book"] for s in sources if "book" in s}
     assert books[2] == {"id": file_id, "text": "fiqh", "title": "Bahishti Zewar", "language": "bn", "page": 2,
                         "pdf": f"/books/fiqh/{file_id}.pdf", "url": f"/books?text=fiqh&book={file_id}&page=2"}

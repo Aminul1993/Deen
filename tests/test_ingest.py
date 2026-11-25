@@ -6,7 +6,7 @@ import json
 import pytest
 
 import ingest
-from conftest import joined_pdf, scanned_pdf, tiny_pdf
+from conftest import joined_pdf, parse_file, scanned_pdf, tiny_pdf
 
 
 def test_chunks_end_at_sentences_and_overlap():
@@ -35,7 +35,7 @@ def test_records_keep_citation_fields_and_skip_records_without_text():
         "plain string record",
         42,
     ]
-    parsed = ingest.parse_file("h.json", json.dumps(records).encode())
+    parsed = parse_file("h.json", json.dumps(records).encode())
     assert parsed.skipped_records == 2
     assert parsed.passages[0].metadata == {"collection": "Sahih al-Bukhari", "hadith_number": 1, "grade": "Sahih",
                                            "nested": '{"a": 1}', "tags": ["a"]}
@@ -44,16 +44,16 @@ def test_records_keep_citation_fields_and_skip_records_without_text():
 
 
 def test_text_jsonl_and_csv():
-    assert [p.text for p in ingest.parse_file("a.txt", "Hello\r\n\r\n\r\nworld".encode("utf-8-sig")).passages] == ["Hello\n\nworld"]
-    assert [p.text for p in ingest.parse_file("h.jsonl", b'{"text": "a"}\n\n{"text": "b"}\n').passages] == ["a", "b"]
-    parsed = ingest.parse_file("q.csv", b"text,surah,ayah,hadith_number\nIn the name of Allah,1,1,007\n,2,2,\n")
+    assert [p.text for p in parse_file("a.txt", "Hello\r\n\r\n\r\nworld".encode("utf-8-sig")).passages] == ["Hello\n\nworld"]
+    assert [p.text for p in parse_file("h.jsonl", b'{"text": "a"}\n\n{"text": "b"}\n').passages] == ["a", "b"]
+    parsed = parse_file("q.csv", b"text,surah,ayah,hadith_number\nIn the name of Allah,1,1,007\n,2,2,\n")
     assert parsed.skipped_records == 1
     assert parsed.passages[0].metadata == {"surah": 1, "ayah": 1, "hadith_number": "007"}  # "007" stays text
 
 
 def test_pdf_pages_keep_their_numbers():
     data = tiny_pdf(["Page one about patience.", "Page two about charity."])
-    parsed = ingest.parse_file("book.PDF", data)
+    parsed = parse_file("book.PDF", data)
     assert [p.metadata for p in parsed.passages] == [{"page": 1}, {"page": 2}]
     assert "patience" in parsed.passages[0].text
     reader = ingest.FileReader("book.pdf", io.BytesIO(data), len(data))
@@ -74,7 +74,7 @@ def test_pdf_pages_keep_their_numbers():
 ])
 def test_unusable_files_say_why(name, data, message):
     with pytest.raises(ingest.IngestError, match=message):
-        ingest.parse_file(name, data)
+        parse_file(name, data)
 
 
 def test_file_ids_and_names():
@@ -133,13 +133,13 @@ def test_scanned_pages_are_read_with_ocr(ocr_space):
 def test_garbled_and_sparse_pages(ocr_space, monkeypatch):
     # Bengali goes to Engine 3; its Markdown headings and bold marks are dropped.
     ocr_space.text = "# রোজার অধ্যায়\n\n**" + BENGALI + "**"
-    parsed = ingest.parse_file("book.pdf", tiny_pdf([BIJOY_PAGE]), language="bn")
+    parsed = parse_file("book.pdf", tiny_pdf([BIJOY_PAGE]), language="bn")
     assert [p.text for p in parsed.passages] == ["রোজার অধ্যায়\n\n" + BENGALI]
     assert ocr_space.calls[-1][0] == 3
 
     # A short text page without a picture (a title) isn't sent; one over a scan (a watermark) is.
     calls = len(ocr_space.calls)
-    assert [p.text for p in ingest.parse_file("t.pdf", tiny_pdf(["Bahishti Zewar"])).passages] == ["Bahishti Zewar"]
+    assert [p.text for p in parse_file("t.pdf", tiny_pdf(["Bahishti Zewar"])).passages] == ["Bahishti Zewar"]
     assert len(ocr_space.calls) == calls
     from pypdf import PdfReader, PdfWriter
     writer = PdfWriter()
@@ -147,18 +147,18 @@ def test_garbled_and_sparse_pages(ocr_space, monkeypatch):
     out = io.BytesIO()
     writer.write(out)
     ocr_space.text = ENGLISH_PAGE
-    assert [p.text for p in ingest.parse_file("w.pdf", out.getvalue(), language="en").passages] == [ENGLISH_PAGE]
+    assert [p.text for p in parse_file("w.pdf", out.getvalue(), language="en").passages] == [ENGLISH_PAGE]
 
     # A page's image is made smaller until it fits OCR.space's file size limit.
     monkeypatch.setattr(ingest, "OCR_MAX_BYTES", 15_000)
-    ingest.parse_file("s.pdf", scanned_pdf(), language="ar")
+    parse_file("s.pdf", scanned_pdf(), language="ar")
     engine, size, length = ocr_space.calls[-1]
     assert engine == 3 and length <= 15_000 and size[0] < 2550
 
 
 def test_pages_ocr_cant_read_are_left_for_later():
     with pytest.raises(ingest.IngestError, match="no text to index"):  # blank pages aren't scans
-        ingest.parse_file("blank.pdf", tiny_pdf(["", ""]))
+        parse_file("blank.pdf", tiny_pdf(["", ""]))
 
     # Without OCR, garbled and scanned pages give no passages and are listed, to be read later.
     data = joined_pdf(tiny_pdf([ENGLISH_PAGE, BIJOY_PAGE, ""]), scanned_pdf())

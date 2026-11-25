@@ -12,12 +12,12 @@ A Groq-hosted LLM (`openai/gpt-oss-120b` by default, temperature 0.1) writes eac
 Product decisions behind these rules are recorded in [PRODUCT.md](PRODUCT.md).
 
 ```
-POST /query ──► LangGraph:  START → condense → retrieve → generate → END
-                                       │          │           │
-                   Groq: rewrite a follow-up      │           Groq (openai/gpt-oss-120b)
-                   as a standalone question       │
-                   (skipped without history)      Pinecone Inference embed
-                                                  + index.query per namespace
+POST /query ──►  condense → retrieve → generate
+                     │          │           │
+ Groq: rewrite a follow-up      │           Groq (openai/gpt-oss-120b)
+ as a standalone question       │
+ (skipped without history)      Pinecone Inference embed
+                                + index.query per namespace
 ```
 
 ## Requirements
@@ -49,6 +49,9 @@ Citations are built like this:
 | `collection: "Sahih al-Bukhari", hadith_number: 52, grade: "Sahih"` | `Sahih al-Bukhari 52, graded Sahih` |
 | plus `book: "Book of Faith"` (or `book: 2` → `Book 2`) | `Sahih al-Bukhari 52 (Book of Faith), graded Sahih` |
 | `hadith_number: 10, grade: "Da'if"`, no collection, namespace `abu_dawud` | `Abu Dawud 10, graded Da'if` |
+| `title: "For good in both worlds", surah: 2, ayah: 201`, in any namespace | `Quran (Surah 2, Ayah 201)` |
+
+A surah is always cited as the Quran's, whatever the record's title or its text's name (`quran_bangla` too). To cite a commentary by surah and ayah under its own name, give its records a `collection`.
 
 ## Setup
 
@@ -100,7 +103,7 @@ The translations are in [static/i18n.js](static/i18n.js). To change a wording, e
 Open `http://localhost:8000/books`, or the **Books** button on the chat page, to read the PDFs uploaded on the [admin page](#admin-page). It works like a small library:
 
 - **Shelves by language.** Books are grouped by the language chosen when they were uploaded. The page's language comes first, then the others by name, then books uploaded without a language. Each card shows the title (from the file name: `Bahishti_Zewar.pdf` becomes "Bahishti Zewar"), the language, the number of pages and the text it was uploaded to.
-- **One page at a time.** A book opens in a reader that draws one page at a time with [pdf.js](static/vendor/pdfjs/README.md), fitted to the window's width (at most 860 pixels wide at 100%). Turn pages with **Previous** and **Next**, the arrow keys, by typing a page number, or by swiping on a touch screen. Zoom from 50% to 300%; the zoom is remembered. **Open PDF** opens the file itself in the browser's own viewer. Only the parts of the PDF that the pages shown need are downloaded, so a large book opens quickly.
+- **One page at a time.** A book opens in a reader that draws one page at a time with [pdf.js](static/vendor/pdfjs/README.md), fitted to the window's width (at most 860 pixels wide at 100%). Turn pages with **Previous** and **Next**, the arrow keys, by typing a page number, or by swiping on a touch screen. Zoom from 50% to 300%; the zoom is remembered. A page's text can be selected, copied, found with the browser's search (Ctrl+F) and read by a screen reader, when the PDF has text (a scan has only pictures). **Open PDF** opens the file itself in the browser's own viewer. Only the parts of the PDF that the pages shown need are downloaded, so a large book opens quickly.
 - **Your place is saved** in this browser (`localStorage`, one entry per book, `deen-book:<text>/<book id>`), every time you turn a page. Opening a book without a page takes you back to where you were, and books you've started appear under **Continue reading**, most recent first, with a progress bar. Nothing about your reading is sent to the server.
 - **Links to a page.** The address of the page you're on, `/books?text=<text>&book=<book id>&page=<n>`, opens the book there. The links in an answer's sources are such addresses. A link to a page doesn't move your saved place: if you were elsewhere in the book, the reader offers **Continue from page N**, and your place moves only once you turn a page.
 
@@ -261,7 +264,7 @@ Set `BLOB_READ_WRITE_TOKEN` in `.env` to the read-write token of a Blob store (i
 - **Private or public store.** Private stores (the default, and what `BLOB_ACCESS=private` expects) can only be read with the token. For a public store, set `BLOB_ACCESS=public`; the value must match the store's access mode, which can't be changed after the store is created. If it doesn't match, PDFs aren't kept and the upload result says to check it.
 - **Readers never get the Blob address.** `GET /books/{text}/{id}.pdf` asks Blob for the byte range the browser asked for and streams it back, so a private store stays private, and pdf.js still loads a large book a range at a time. The token is only ever sent to `*.blob.vercel-storage.com` over HTTPS, and redirects aren't followed. Every page a reader turns passes through the server, so mind Blob's [download pricing](https://vercel.com/docs/vercel-blob/usage-and-pricing) for very large or popular books.
 - **Books kept on disk before Blob was set up** are still served from the disk, and are moved to Blob only if the file is uploaded again. Turning Blob off again works the same way the other round.
-- **Not in Blob:** upload parts still go to `data/upload-parts/` (`/tmp/upload-parts/` on Vercel) while a job runs (they're deleted when it ends), and the credentials, file list and job progress stay in Redis.
+- **Not in Blob:** upload parts still go to `data/upload-parts/` while a job runs (they're deleted when it ends), and the credentials, file list and job progress stay in Redis.
 
 The token is a long-lived secret with full access to the store: keep it out of git (`.env` is ignored) and rotate it in the dashboard if it leaks. On Vercel, the SDK prefers its own short-lived OIDC credentials for uploads and deletes, but reading a private book through the server needs the read-write token, so set it there too.
 
@@ -273,9 +276,11 @@ Records without `text` or `content` are skipped and counted in the upload result
 
 1. The page starts a job with the file's name and size. Unsupported files, and files over 200 MB, are refused before anything is sent.
 2. It sends the parts in order, showing the percentage. A part that fails because of the network is sent again; if the server already has it, the server says how much it has and the page carries on from there.
-3. Once all parts have arrived, the server processes the file in a background thread, and the page shows how many passages are stored so far (and, for a PDF, which page it's on and how many were read with OCR). You can close the page: the job carries on, and the file appears in the list when it's done.
+3. Once all parts have arrived, the server processes the file in a background thread, and the page shows how many passages are stored so far (and, for a PDF, which page it's on and how many were read with OCR). You can close the page now: the job carries on, and the file appears in the list when it's done. Before then, while parts are being sent, the browser asks before leaving the page, since the upload would be lost.
 
-Parts are kept in `data/upload-parts/` until the job ends (on Vercel, where the app's folder is read-only, in `/tmp/upload-parts/`). Job progress is kept in the database, so any worker process can take parts or report on a job. A job is processed by the process that started it; if that process stops, the job is reported as failed after 10 minutes without progress. Finished and abandoned jobs, and their parts, are removed after a day.
+**Not on Vercel.** A job needs a server that keeps running after a request has been answered: Vercel stops a function within minutes (at most 800 seconds) and keeps no files between requests, so a large upload or a scanned book would be cut off partway. When the `VERCEL` environment variable is set, starting a job or reading pages again answers 503 and says so. Run Deen on a normal server or your own computer with the same `.env` and upload from its admin page: it uses the same Redis database, Pinecone index and Blob store, so the files and books appear on the Vercel site too.
+
+Parts are kept in `data/upload-parts/` until the job ends. Job progress is kept in the database, so any worker process can take parts or report on a job. A job is processed by the process that started it; if that process stops, the job is reported as failed after 10 minutes without progress. Finished and abandoned jobs, and their parts, are removed after a day.
 
 Behind a reverse proxy, allow request bodies a little over 4 MB (for nginx, `client_max_body_size 5m;`). Mind the cost of very large files: embedding uses about one token per 3–4 characters of English, so a 200 MB file needs roughly 50–60 million tokens, far more than Pinecone's free Starter allowance of 5 million a month.
 
@@ -340,9 +345,9 @@ curl http://localhost:8000/texts
   "dimension": 1024,
   "total_vector_count": 21362,
   "texts": [
-    {"namespace": "quran", "vector_count": 6236},
-    {"namespace": "sahih_bukhari", "vector_count": 7563},
-    {"namespace": "sahih_muslim", "vector_count": 7563}
+    {"namespace": "quran", "vector_count": 6236, "name": "Quran"},
+    {"namespace": "sahih_bukhari", "vector_count": 7563, "name": "Sahih Bukhari"},
+    {"namespace": "sahih_muslim", "vector_count": 7563, "name": "Sahih Muslim"}
   ]
 }
 ```
@@ -396,7 +401,8 @@ The PDFs kept as [books](#books-page), by title, and the language codes a book c
   "books": [
     {"id": "bahishti-zewar-831188a7b310", "text": "fiqh", "title": "Bahishti Zewar", "filename": "Bahishti_Zewar.pdf",
      "language": "bn", "pages": 312, "size_bytes": 4823112, "uploaded_at": "2026-11-19T10:45:46+00:00",
-     "pdf": "/books/fiqh/bahishti-zewar-831188a7b310.pdf", "url": "/books?text=fiqh&book=bahishti-zewar-831188a7b310"}
+     "pdf": "/books/fiqh/bahishti-zewar-831188a7b310.pdf", "url": "/books?text=fiqh&book=bahishti-zewar-831188a7b310",
+     "text_name": "Fiqh"}
   ]
 }
 ```
@@ -479,7 +485,7 @@ When `history` isn't empty, the graph makes two Groq calls:
 1. **condense** rewrites the question into one that stands on its own, in the question's own language, such as *"What else does the Quran say about patience in hardship?"*. This rewrite is what gets embedded and searched, because "tell me more" alone would match nothing useful.
 2. **generate** receives the earlier turns, the original question, the rewrite, and the newly retrieved excerpts. The system prompt says earlier turns only explain what the question refers to. Every claim must still be cited from the new excerpts.
 
-Without `history`, condense is skipped and the request costs one Groq call, as before. Each history message is cut to 1,500 characters inside the prompts to stay within Groq token limits. Send only the most recent turns: the chat UI sends the last 8 messages.
+Without `history`, condense is skipped and the request costs one Groq call, as before. Each history message is cut to 1,500 characters inside the prompts to stay within Groq token limits. Send only the most recent turns: the chat UI sends the last 8 messages, each cut to those 1,500 characters.
 
 #### Search one text
 
@@ -536,12 +542,12 @@ Sending the body as UTF-8 bytes keeps Arabic and Bengali questions intact in Win
 | 500 | Misconfiguration: embedding dimension mismatch, or a sparse embedding model |
 | 429 | More than 20 questions from one visitor (IP address) within a minute. The response says how many seconds to wait, also in a `Retry-After` header. Counts are kept per worker process |
 | 502 | Pinecone or Groq request failed |
-| 503 | Credentials haven't been entered on the admin page yet (the message names what's missing). The books endpoints need only the index name |
+| 503 | Credentials haven't been entered on the admin page yet (the message names what's missing). The books endpoints need only the index name. Also when a worker process is already answering 20 questions: the rest are turned away, with a `Retry-After` header, so the pages and books keep loading while Groq is slow |
 
 ## Project layout
 
 ```
-main.py            FastAPI app, LangGraph graph, prompts, Pinecone and Groq clients, books, admin API
+main.py            FastAPI app, the question pipeline (condense, retrieve, generate), prompts, Pinecone and Groq clients, books, admin API
 ingest.py          Splits uploaded files (.txt, .md, .pdf, .json, .jsonl, .csv) into passages for the admin API, with OCR for scanned PDF pages
 static/index.html  Chatbot web page, served at /
 static/books.html  Books page (library and page-by-page reader), served at /books
@@ -549,6 +555,7 @@ static/i18n.js     The chat and books pages' text in English, Bengali and Arabic
 static/prayer-times.js  Azan time calculator and city list for the chat page (runs in the browser)
 static/zakat.js    Zakat calculator's arithmetic and Hanafi nisab rules for the chat page (runs in the browser)
 static/admin.html  Admin page, served at /admin
+static/base.css    Fonts, colours and the parts the three pages share
 static/vendor/pdfjs/  pdf.js, which draws a book's pages on the books page (Apache License 2.0)
 db.py              Redis storage for the credentials, the list of uploaded files and upload progress
 storage.py         Vercel Blob storage for the PDFs kept as books: upload, delete, and range reads through the app
@@ -556,7 +563,7 @@ static/fonts/      Self-hosted Source Serif 4, Noto Naskh Arabic and Noto Serif 
 data/              Not in git: upload parts while they're processed, and the PDFs kept as books (data/books/)
 PRODUCT.md         Product decisions: users, positioning, Hanafi stance, languages
 requirements.txt   Dependencies
-requirements-dev.txt  Test dependencies (pytest, fakeredis)
+requirements-dev.txt  Test dependencies (pytest, fakeredis, quickjs)
 tests/             Tests, with Pinecone and Groq faked: run `pytest`
 .env.example       Environment variable template
 ```

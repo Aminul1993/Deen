@@ -179,6 +179,16 @@ def test_a_private_web_address_is_refused_straight_away(client):
     assert r.status_code == 400 and "private or local" in r.json()["detail"]
 
 
+def test_background_work_is_refused_on_vercel(client, monkeypatch):
+    """Vercel stops a function within minutes of its request, so a job there would be cut off partway."""
+    install()
+    monkeypatch.setenv("VERCEL", "1")
+    for path, body in [("/admin/api/jobs", {"namespace": "x", "filename": "a.txt", "size": 10}),
+                       ("/admin/api/files/a-0123456789ab/ocr?namespace=x", None)]:
+        r = client.post(path, headers=AUTH, json=body)
+        assert r.status_code == 503 and "same .env" in r.json()["detail"], path
+
+
 def test_a_download_over_the_limit_fails(client, web_server, monkeypatch):
     install()
     monkeypatch.setattr(main, "MAX_LARGE_UPLOAD_BYTES", 1000)

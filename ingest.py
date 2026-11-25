@@ -101,12 +101,6 @@ class Passage:
     metadata: Dict[str, Any]
 
 
-@dataclass(frozen=True)
-class ParsedFile:
-    passages: List[Passage]
-    skipped_records: int  # records with no "text" or "content"
-
-
 def clean_filename(filename: str) -> str:
     """The file's base name, without any directory a browser or client sent with it."""
     name = re.split(r"[\\/]", filename or "")[-1].strip()
@@ -253,13 +247,6 @@ class FileReader:
             fields = {key: value for key, value in record.items() if key not in TEXT_FIELDS and key not in IGNORED_FIELDS}
             metadata = _metadata(fields, parse_numbers)
             yield from (Passage(chunk, metadata) for chunk in chunk_text(text))
-
-
-def parse_file(filename: str, data: bytes, language: Optional[str] = None) -> ParsedFile:
-    """All of a small file's passages at once."""
-    reader = FileReader(filename, io.BytesIO(data), len(data), language=language)
-    passages = list(reader)
-    return ParsedFile(passages=passages, skipped_records=reader.skipped_records)
 
 
 def chunk_text(text: str, size: int = CHUNK_CHARS, overlap: int = CHUNK_OVERLAP) -> List[str]:

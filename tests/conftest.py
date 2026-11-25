@@ -11,6 +11,7 @@ import sys
 import urllib.error
 import urllib.parse
 from pathlib import Path
+from types import SimpleNamespace
 
 import fakeredis
 import pytest
@@ -153,13 +154,20 @@ def install(index=None, pc=None, **overrides):
     """Save working settings and hand the app fake Pinecone clients for them."""
     values = {**BASE_SETTINGS, **overrides}
     main.db.save_settings(values)
-    settings = main.Settings(**values, min_score=None)
+    settings = main.Settings(**values, min_score=main._optional_float_env("MIN_RELEVANCE_SCORE"))
     res = main.Resources(settings=settings, pc=pc or FakePC(), index=index or FakeIndex(), llm=main.make_llm(settings))
     main.set_resources(res)
     return res
 
 
 AUTH = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+
+
+def parse_file(filename, data, language=None):
+    """All of a small file's passages at once (.passages), and how many records had no text (.skipped_records)."""
+    reader = main.ingest.FileReader(filename, io.BytesIO(data), len(data), language=language)
+    passages = list(reader)
+    return SimpleNamespace(passages=passages, skipped_records=reader.skipped_records)
 
 
 @pytest.fixture(autouse=True)

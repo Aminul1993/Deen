@@ -1,5 +1,7 @@
 """The API: citations, admin sign-in, credentials, uploads, readers and limits. Pinecone and Groq are faked."""
 
+import asyncio
+import dataclasses
 import json
 from types import SimpleNamespace
 
@@ -12,9 +14,10 @@ import main
 from conftest import AUTH, FakeIndex, FakePC, install
 
 
-def upload(client, namespace, filename, content, mime="text/plain"):
+def upload(client, namespace, filename, content, mime="text/plain", language=None):
     data = content if isinstance(content, bytes) else content.encode()
-    return client.post("/admin/api/files", headers=AUTH, data={"namespace": namespace}, files={"file": (filename, data, mime)})
+    form = {"namespace": namespace, **({"language": language} if language else {})}
+    return client.post("/admin/api/files", headers=AUTH, data=form, files={"file": (filename, data, mime)})
 
 
 @pytest.fixture
@@ -49,9 +52,79 @@ def fake_groq(monkeypatch):
     ("bukhari", {"collection": "Sahih al-Bukhari", "hadith_number": 52, "book": "Book of Faith", "grade": "Sahih"},
      "Sahih al-Bukhari 52 (Book of Faith), graded Sahih"),
     ("abu_dawud", {"hadith_number": 10, "grade": "Da'if"}, "Abu Dawud 10, graded Da'if"),
+    # A surah is the Quran's, whatever the record's title or the text's name.
+    ("duas", {"title": "For good in both worlds", "surah": 2, "ayah": 201}, "Quran (Surah 2, Ayah 201)"),
+    ("quran_bangla", {"surah": 2, "ayah": 153}, "Quran (Surah 2, Ayah 153)"),
 ])
 def test_citations(namespace, fields, expected):
     assert main.format_reference(namespace, fields) == expected
+
+
+# ---------------------------------------------------------------- answering
+
+
+class FakeLLM:
+    """Groq's chat API, replying from a script and recording every request's messages."""
+
+    def __init__(self, *replies):
+        self.replies = list(replies)
+        self.requests = []
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+    def create(self, model, temperature, messages):
+        self.requests.append(messages)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self.replies.pop(0)))])
+
+
+class ScoredIndex(FakeIndex):
+    """Matches score what their record says, best first."""
+
+    def query(self, vector, top_k, namespace, include_metadata, include_values):
+        matches = [{"id": vid, "score": record["score"], "metadata": record["metadata"]}
+                   for (ns, vid), record in self.vectors.items() if ns == namespace]
+        return {"matches": sorted(matches, key=lambda m: -m["score"])[:top_k]}
+
+
+def test_a_follow_up_is_answered_from_the_best_passages_in_its_language(client, monkeypatch):
+    monkeypatch.setenv("MIN_RELEVANCE_SCORE", "0.7")
+    index = ScoredIndex()
+    for namespace, vector_id, score, metadata in [
+        ("quran", "q-153", 0.9, {"text": "Seek help through patience and prayer.", "surah": 2, "ayah": 153}),
+        ("quran", "q-1", 0.5, {"text": "In the name of Allah.", "surah": 1, "ayah": 1}),
+        ("sahih_bukhari", "b-52", 0.8, {"text": "Patience is at the first stroke.", "collection": "Sahih al-Bukhari",
+                                        "hadith_number": 52, "grade": "Sahih"}),
+    ]:
+        index.vectors[(namespace, vector_id)] = {"id": vector_id, "score": score, "metadata": metadata}
+    llm = FakeLLM("কষ্টে ধৈর্য সম্পর্কে কুরআন ও হাদিস কী বলে?", "ধৈর্য ধরুন (Quran, Surah 2, Ayah 153)।")
+    main.set_resources(dataclasses.replace(install(index=index), llm=llm))
+
+    history = [{"role": "user", "content": "কষ্ট সম্পর্কে কুরআন কী বলে?"}, {"role": "assistant", "content": "কুরআন বলে …"}]
+    r = client.post("/query", json={"query": "আর ধৈর্য?", "history": history})
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["answer"] == "ধৈর্য ধরুন (Quran, Surah 2, Ayah 153)।"
+    assert body["search_query"] == "কষ্টে ধৈর্য সম্পর্কে কুরআন ও হাদিস কী বলে?"  # the rewrite is what was searched
+    assert [s["id"] for s in body["sources"]] == ["q-153", "b-52"]  # best first across texts; 0.5 is below the cut
+    condense, generate = llm.requests
+    assert condense[0]["content"] == main.CONDENSE_PROMPT and "কষ্ট সম্পর্কে" in condense[1]["content"]
+    assert [m["role"] for m in generate] == ["system", "user", "assistant", "user"]  # the earlier turns come along
+    prompt = generate[-1]["content"]
+    assert "[Source 1] Quran (Surah 2, Ayah 153)" in prompt and "[Source 2] Sahih al-Bukhari 52, graded Sahih" in prompt
+    assert prompt.endswith("Answer the question in Bengali, using only these excerpts and following every rule above.")
+
+
+def test_questions_beyond_the_parallel_limit_are_turned_away(client):
+    install()
+    for _ in range(main.MAX_PARALLEL_QUESTIONS):
+        main._question_slots.acquire()
+    try:
+        busy = client.post("/query", json={"query": "hi"})
+    finally:
+        for _ in range(main.MAX_PARALLEL_QUESTIONS):
+            main._question_slots.release()
+    assert busy.status_code == 503 and "a lot of questions" in busy.json()["detail"] and busy.headers["Retry-After"]
+    assert client.post("/query", json={"query": "hi"}).status_code == 200  # an empty index: "nothing found"
 
 
 # ---------------------------------------------------------------- admin sign-in
@@ -277,7 +350,7 @@ def test_readers(client):
          "text": "Our Lord, give us good in this world", "surah": 2, "ayah": 201, "category": "General"},
         {"text": "بِاسْمِكَ اللَّهُمَّ", "arabic": "بِاسْمِكَ اللَّهُمَّ", "collection": "Sahih al-Bukhari", "hadith_number": 6324, "grade": "Sahih"},
     ]
-    upload(client, "duas", "a.json", json.dumps(duas))
+    upload(client, "duas", "a.json", json.dumps(duas), language="ar")
     upload(client, "namaz", "namaz.json", json.dumps([{"section": "Salah", "title": "Takbir", "text": "Say Allahu akbar.", "hadith_number": 3}]))
 
     item = client.get("/read/duas", params={"position": 0}).json()["item"]
@@ -300,11 +373,11 @@ def test_each_visitor_gets_a_limited_number_of_questions():
     """Finding 5."""
     visitor = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"))
     for _ in range(main.QUERY_LIMIT_PER_MINUTE):
-        main.limit_questions(visitor)
+        asyncio.run(main.limit_questions(visitor))
     with pytest.raises(HTTPException) as refused:
-        main.limit_questions(visitor)
+        asyncio.run(main.limit_questions(visitor))
     assert refused.value.status_code == 429 and "Retry-After" in refused.value.headers
-    main.limit_questions(SimpleNamespace(client=SimpleNamespace(host="198.51.100.1")))  # others are unaffected
+    asyncio.run(main.limit_questions(SimpleNamespace(client=SimpleNamespace(host="198.51.100.1"))))  # others are unaffected
 
 
 def test_the_question_endpoint_is_limited(client):

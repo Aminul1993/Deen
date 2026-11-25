@@ -10,153 +10,15 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232d5b60'/%3E%3Cpath d='M16 10.5c-2.2-1.6-5-2.2-8-2v13c3-.2 5.8.4 8 2 2.2-1.6 5-2.2 8-2v-13c-3-.2-5.8.4-8 2zm0 0v13' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
 <!-- Sets the page's language and direction from the reader's choice before anything is drawn. -->
 <script src="/static/i18n.js"></script>
+<link rel="stylesheet" href="/static/base.css">
 <style>
-  /* Fonts as on the chat page (SIL Open Font License, see /static/fonts/OFL-*.txt). */
-  @font-face {
-    font-family: "Source Serif 4";
-    font-style: normal;
-    font-weight: 400 700;
-    font-display: swap;
-    src: url(/static/fonts/source-serif-4-latin.woff2) format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-  }
-  @font-face {
-    font-family: "Source Serif 4";
-    font-style: normal;
-    font-weight: 400 700;
-    font-display: swap;
-    src: url(/static/fonts/source-serif-4-latin-ext.woff2) format("woff2");
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
-  }
-  @font-face {
-    font-family: "Noto Naskh Arabic";
-    font-style: normal;
-    font-weight: 400 700;
-    font-display: swap;
-    size-adjust: 112%;
-    src: url(/static/fonts/noto-naskh-arabic.woff2) format("woff2");
-    unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
-  }
-  @font-face {
-    font-family: "Noto Serif Bengali";
-    font-style: normal;
-    font-weight: 400 700;
-    font-display: swap;
-    src: url(/static/fonts/noto-serif-bengali.woff2) format("woff2");
-    unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0, U+1CD2, U+1CD5-1CD6, U+1CD8, U+1CE1, U+1CEA, U+1CED, U+1CF2, U+1CF5-1CF7, U+200C-200D, U+20B9, U+25CC, U+A8F1;
-  }
-
-  /* Same tokens as the chat page (static/index.html). */
-  :root {
-    --bg: #f5f2ec;
-    --surface: #fffdf9;
-    --ink: #22252a;
-    --muted: #686c73;
-    --border: #e3ddd2;
-    --border-strong: #8e887d;
-    --accent: #2d5b60;
-    --accent-hover: #234a4e;
-    --on-accent: #ffffff;
-    --focus-ring: rgba(45, 91, 96, .18);
-    --selection: #cfe0df;
-    --badge-bg: #e6eeee;
-    --badge-ink: #2d5b60;
-    --error-bg: #fbeceb;
-    --error-ink: #8a2c24;
-    --error-border: #efc9c5;
-    --shadow: 0 1px 2px rgba(40, 30, 10, .05), 0 4px 14px rgba(40, 30, 10, .04);
-    --page-shadow: 0 1px 3px rgba(40, 30, 10, .12), 0 8px 24px rgba(40, 30, 10, .08);
-    --radius: 14px;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --serif: "Source Serif 4", "Noto Naskh Arabic", "Noto Serif Bengali", Georgia, "Times New Roman", serif;
-    accent-color: var(--accent);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #141619;
-      --surface: #1c1f23;
-      --ink: #e7e5e1;
-      --muted: #9a9fa6;
-      --border: #2c3036;
-      --border-strong: #666d77;
-      --accent: #7fb3b3;
-      --accent-hover: #96c4c4;
-      --on-accent: #0f1f1f;
-      --focus-ring: rgba(127, 179, 179, .22);
-      --selection: #2f5154;
-      --badge-bg: #213739;
-      --badge-ink: #a9d0cf;
-      --error-bg: #3a1f1d;
-      --error-ink: #f2b8b1;
-      --error-border: #5c302b;
-      --shadow: none;
-      --page-shadow: 0 2px 12px rgba(0, 0, 0, .5);
-    }
-  }
-
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
+  html, body { height: 100%; }
   body {
     display: flex;
     flex-direction: column;
     height: 100dvh;
-    background: var(--bg);
-    color: var(--ink);
-    font: 15px/1.5 var(--sans);
-    -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
   }
-  button, select, input { font: inherit; color: inherit; }
-  button { touch-action: manipulation; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  ::selection { background: var(--selection); color: var(--ink); }
-  h1, h2, h3 { text-wrap: balance; }
-  p { text-wrap: pretty; }
-  [hidden] { display: none !important; }
-  /* Arrows point the other way when the page reads right to left. */
-  :root[dir="rtl"] .flip-rtl { scale: -1 1; }
-
-  /* Top bar */
-  .topbar {
-    display: flex;
-    align-items: center;
-    gap: 10px 14px;
-    padding: 12px 20px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-  }
-  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin-inline-end: auto; }
-  .brand h1 { margin: 0; font: 600 22px/1.2 var(--serif); }
-  .brand span { color: var(--muted); font-size: 13px; }
-  .lang-pick { display: flex; align-items: center; gap: 6px; color: var(--muted); }
-  .lang-pick svg { flex: none; }
-  .lang-pick select {
-    font-size: 14px;
-    color: var(--ink);
-    background: var(--bg);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    padding: 6px 8px;
-    cursor: pointer;
-  }
-  .ghost {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    background: transparent;
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    padding: 6px 12px;
-    color: var(--ink);
-    text-decoration: none;
-    cursor: pointer;
-    transition: background-color .15s ease-out;
-  }
-  .ghost:hover:not(:disabled) { background: var(--bg); }
-  .ghost:active:not(:disabled) { transform: translateY(1px); }
-  .ghost:disabled { color: var(--muted); border-color: var(--border); cursor: default; }
-  .ghost svg { flex: none; }
 
   /* Library */
   .library { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; scrollbar-color: var(--border-strong) transparent; }
@@ -205,18 +67,7 @@
   .library-status:empty { display: none; }
   .notice { padding: 12px 14px; color: var(--error-ink); background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 10px; }
   .notice p { margin: 0; }
-  .retry {
-    margin-top: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 6px 14px;
-    color: var(--error-ink);
-    background: transparent;
-    border: 1px solid currentColor;
-    border-radius: 8px;
-    cursor: pointer;
-  }
-  .retry:hover { background: var(--surface); }
+  .notice .retry { margin-top: 10px; }
 
   /* Reader: a bar with the title and zoom, the page, and the page controls */
   .viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -266,8 +117,39 @@
   }
   /* Grows with a zoomed-in page instead of overflowing to the left, so every part can be scrolled to. */
   .page-holder { display: flex; justify-content: center; width: max-content; min-width: 100%; }
+  .page-frame { position: relative; flex: none; }
   .page-holder canvas { display: block; background: #fff; box-shadow: var(--page-shadow); transition: opacity .15s ease-out; }
   .stage.busy canvas { opacity: .55; transition-delay: .25s; } /* dim only if the next page is slow to draw */
+  /* The page's text, invisible over the drawing, so it can be selected, copied, found with Ctrl+F and read
+     aloud. From pdf.js's pdf_viewer.css (5.4.530); pdf.js sizes and places the spans with these variables. */
+  .page-frame { --user-unit: 1; --scale-round-x: 1px; --scale-round-y: 1px; }
+  .textLayer {
+    position: absolute;
+    inset: 0;
+    overflow: clip;
+    line-height: 1;
+    text-align: initial;
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
+    forced-color-adjust: none;
+    transform-origin: 0 0;
+    z-index: 0;
+    --min-font-size: 1;
+    --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+    --min-font-size-inv: calc(1 / var(--min-font-size));
+  }
+  .textLayer :is(span, br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+  .textLayer > :not(.markedContent), .textLayer .markedContent span:not(.markedContent) {
+    z-index: 1;
+    --font-height: 0;
+    font-size: calc(var(--text-scale-factor) * var(--font-height));
+    --scale-x: 1;
+    --rotate: 0deg;
+    transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+  }
+  .textLayer .markedContent { display: contents; }
+  .textLayer ::selection { background: rgb(45 91 96 / .3); }
+  .textLayer br::selection { background: transparent; }
   .viewer-note { max-width: 440px; margin: 12vh auto 0; text-align: center; color: var(--muted); }
   .viewer-note:empty { display: none; }
   .viewer-note .notice { text-align: start; }
@@ -296,13 +178,8 @@
   }
   .page-jump input::-webkit-inner-spin-button, .page-jump input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
-
   @media (max-width: 600px) {
-    .topbar { padding: 10px 16px; }
-    .brand span { display: none; }
-    .lang-pick select, .page-jump input { font-size: 16px; } /* stops iOS zooming on focus */
-    .ghost { padding: 8px 10px; }
+    .page-jump input { font-size: 16px; } /* stops iOS zooming on focus */
     .page { padding: 22px 12px 48px; }
     .page-head h2 { font-size: 26px; }
     .book-grid { grid-template-columns: 1fr; }
@@ -313,7 +190,7 @@
     .pager { padding-inline: 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .ghost, .tool, .book-card, .page-holder canvas { transition: none; }
+    .tool, .book-card, .page-holder canvas { transition: none; }
   }
 </style>
 </head>
@@ -417,7 +294,8 @@
   let languages = {}; // code -> English name, from the server
   let loadFailed = false;
   let pdfjsLib = null;
-  const view = { book: null, task: null, doc: null, page: 1, pages: 0, zoom: savedZoom(), renderId: 0, renderTask: null, resumePage: null };
+  const view = { book: null, task: null, doc: null, page: 1, pages: 0, zoom: savedZoom(), renderId: 0, renderTask: null,
+    textLayer: null, resumePage: null };
 
   // ---------- helpers ----------
 
@@ -426,12 +304,6 @@
     if (className) node.className = className;
     if (text != null) node.textContent = text;
     return node;
-  }
-
-  // Mirrors display_name() in main.py.
-  function prettyName(ns) {
-    if (!ns || ns === "__default__") return "Untitled text";
-    return ns.replace(/[_-]/g, " ").trim().replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   function languageLabel(code) {
@@ -501,12 +373,14 @@
       history.pushState({ fromLibrary: true }, "", book.url);
       openBook(book, null);
     });
-    const title = el("span", "book-title", book.title);
-    title.dir = "auto";
+    // The title keeps the page's direction, so it starts on the same side as the line under it; <bdi> lets
+    // a title in another script read in its own direction.
+    const title = el("span", "book-title");
+    title.append(el("bdi", null, book.title));
     if (book.language) title.lang = book.language;
     const meta = [languageLabel(book.language)];
     if (book.pages) meta.push(t("books.pages", { count: book.pages }));
-    meta.push(prettyName(book.text));
+    meta.push(book.text_name);
     card.append(title, el("span", "book-meta", meta.join(" · ")));
 
     const progress = readProgress(book);
@@ -602,8 +476,9 @@
   function closeBook() {
     view.renderId++; // any page still being drawn is dropped
     if (view.renderTask) view.renderTask.cancel();
+    if (view.textLayer) view.textLayer.cancel();
     if (view.task) view.task.destroy().catch(() => {});
-    Object.assign(view, { book: null, task: null, doc: null, renderTask: null, resumePage: null, pages: 0 });
+    Object.assign(view, { book: null, task: null, doc: null, renderTask: null, textLayer: null, resumePage: null, pages: 0 });
     holder.replaceChildren();
     setNote("");
   }
@@ -617,7 +492,7 @@
     if (book) {
       meta.push(languageLabel(book.language));
       if (view.pages) meta.push(t("books.pages", { count: view.pages }));
-      meta.push(prettyName(book.text));
+      meta.push(book.text_name);
     }
     $("book-meta").textContent = meta.join(" · ");
     const open = $("open-pdf");
@@ -726,7 +601,15 @@
       });
       await view.renderTask.promise;
       if (id !== view.renderId) return;
-      holder.replaceChildren(canvas);
+      // The page's text over the drawing, so it can be selected, copied, searched and read aloud. A scan has none.
+      const frame = el("div", "page-frame");
+      frame.style.setProperty("--total-scale-factor", String(viewport.scale * (viewport.userUnit || 1)));
+      const text = el("div", "textLayer");
+      frame.append(canvas, text);
+      holder.replaceChildren(frame);
+      if (view.textLayer) view.textLayer.cancel();
+      view.textLayer = new pdfjsLib.TextLayer({ textContentSource: page.streamTextContent(), container: text, viewport });
+      view.textLayer.render().catch(() => {}); // the drawn page is enough if its text can't be laid out
       setNote("");
       if (toTop) stage.scrollTop = 0;
     } catch (err) {
