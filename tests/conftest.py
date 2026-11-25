@@ -3,9 +3,13 @@
 Run with:  pytest
 """
 
+import base64
+import io
 import json
 import os
 import sys
+import urllib.error
+import urllib.parse
 from pathlib import Path
 
 import fakeredis
@@ -25,6 +29,7 @@ os.environ.update({
     # Books stay on disk unless a test sets up a fake Blob store: the real store in .env is never used.
     "BLOB_READ_WRITE_TOKEN": "", "VERCEL_BLOB_READ_WRITE_TOKEN": "", "BLOB_STORE_ID": "", "VERCEL_OIDC_TOKEN": "",
     "BLOB_ACCESS": "",
+    "OCR_SPACE_API_KEY": "",  # OCR is off unless a test fakes OCR.space (see ocr_space)
 })
 
 import main  # noqa: E402
@@ -170,6 +175,60 @@ def isolated(tmp_path, monkeypatch):
     main._recent_questions.clear()
     yield
     main.set_resources(None)
+
+
+def scanned_pdf(pages=1):
+    """An image-only PDF, like a scanned book: each US Letter page is a picture, with no text layer."""
+    from PIL import Image, ImageDraw
+    images = [Image.new("L", (850, 1100), 255) for _ in range(pages)]
+    for image in images:
+        ImageDraw.Draw(image).rectangle((100, 100, 700, 300), fill=0)
+    out = io.BytesIO()
+    images[0].save(out, "PDF", save_all=True, append_images=images[1:], resolution=100)
+    return out.getvalue()
+
+
+def joined_pdf(*pdfs):
+    """The pages of several PDFs, in order, in one PDF."""
+    from pypdf import PdfReader, PdfWriter
+    writer = PdfWriter()
+    for data in pdfs:
+        writer.append(PdfReader(io.BytesIO(data)))
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+@pytest.fixture
+def ocr_space(monkeypatch):
+    """A fake OCR.space API, with OCR_SPACE_API_KEY set. Set .text to what it reads, .answer to its whole
+    JSON answer, or .error to an (HTTP status, body) it fails with (or a list of them, or None, one per call). .calls records each page's
+    (engine, image size, JPEG bytes)."""
+    from PIL import Image
+
+    class FakeOcrSpace:
+        text = "Text that OCR read from the scanned page, about fasting in Ramadan."
+        answer = None
+        error = None
+        calls = []
+
+    fake = FakeOcrSpace()
+    monkeypatch.setenv("OCR_SPACE_API_KEY", "test-ocr-key")
+
+    def urlopen(request, timeout=None):
+        assert request.full_url == main.ingest.OCR_SPACE_URL and request.get_header("Apikey") == "test-ocr-key"
+        form = urllib.parse.parse_qs(request.data.decode())
+        image = base64.b64decode(form["base64Image"][0].removeprefix("data:image/jpeg;base64,"))
+        fake.calls.append((int(form["OCREngine"][0]), Image.open(io.BytesIO(image)).size, len(image)))
+        error = fake.error.pop(0) if isinstance(fake.error, list) else fake.error  # a list: one per call
+        if error:
+            raise urllib.error.HTTPError(request.full_url, error[0], "error", {}, io.BytesIO(error[1]))
+        answer = fake.answer or {"ParsedResults": [{"FileParseExitCode": 1, "ParsedText": fake.text, "ErrorMessage": ""}],
+                                 "OCRExitCode": 1, "IsErroredOnProcessing": False}
+        return io.BytesIO(json.dumps(answer).encode())
+
+    monkeypatch.setattr(main.ingest.urllib.request, "urlopen", urlopen)
+    return fake
 
 
 @pytest.fixture

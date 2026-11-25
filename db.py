@@ -9,6 +9,7 @@ TLS). Every key starts with "deen:", so the database can be shared with other ap
     deen:uploads:<index name>  hash: JSON [namespace, file id] -> JSON of the uploaded file's row
     deen:job:<id>              hash: column -> JSON value, one per upload in progress
     deen:jobs                  set of the ids of those jobs
+    deen:lock:<name>           the id of the job holding a lock, e.g. reading a file's pages again
 
 It holds API keys in plain text, so keep the URL secret and the database private.
 """
@@ -27,7 +28,7 @@ JOBS_KEY = PREFIX + "jobs"
 JOB_STATES_FINISHED = ("done", "failed")
 
 JOB_FIELDS = ("id", "namespace", "filename", "source_url", "language", "size", "received", "state", "passages",
-              "result", "error", "created_at", "updated_at")
+              "pages", "pages_read", "ocr_pages", "result", "error", "created_at", "updated_at")
 
 _clients: Dict[str, redis.Redis] = {}
 
@@ -94,17 +95,19 @@ def get_upload(index_name: str, namespace: str, file_id: str) -> Optional[Dict[s
 def save_upload(index_name: str, namespace: str, file_id: str, filename: str,
                 passages: int, size_bytes: int, uploaded_at: Optional[str] = None,
                 language: Optional[str] = None, pages: Optional[int] = None, book: bool = False,
-                book_url: Optional[str] = None) -> Dict[str, Any]:
+                book_url: Optional[str] = None, pending_pages: Optional[List[int]] = None) -> Dict[str, Any]:
     """Record an uploaded file and return its row.
 
     uploaded_at orders a reader's passages. It defaults to now, and a file uploaded again keeps
     the time of its first upload, so it doesn't jump to the end of the reader. language is the
     code chosen on upload, pages a PDF's page count, and book says its PDF is kept for the books page:
-    in Vercel Blob at book_url, or on the server's disk when book_url is None.
+    in Vercel Blob at book_url, or on the server's disk when book_url is None. pending_pages are
+    the numbers of a PDF's pages OCR couldn't read yet.
     """
     earlier = get_upload(index_name, namespace, file_id)
     row = {"file_id": file_id, "filename": filename, "namespace": namespace, "passages": passages,
            "size_bytes": size_bytes, "language": language, "pages": pages, "book": book, "book_url": book_url,
+           "pending_pages": pending_pages or [],
            "uploaded_at": earlier["uploaded_at"] if earlier else uploaded_at or _now()}
     client().hset(_uploads_key(index_name), _upload_field(namespace, file_id), json.dumps(row))
     return row
@@ -112,6 +115,20 @@ def save_upload(index_name: str, namespace: str, file_id: str, filename: str,
 
 def delete_upload(index_name: str, namespace: str, file_id: str) -> None:
     client().hdel(_uploads_key(index_name), _upload_field(namespace, file_id))
+
+
+def lock(name: str, owner: str, seconds: int) -> bool:
+    """Hold a named lock for seconds, unless another owner holds it. The owner taking it again extends it."""
+    key = f"{PREFIX}lock:{name}"
+    if client().set(key, owner, nx=True, ex=seconds):
+        return True
+    return client().get(key) == owner and bool(client().expire(key, seconds))
+
+
+def unlock(name: str, owner: str) -> None:
+    key = f"{PREFIX}lock:{name}"
+    if client().get(key) == owner:
+        client().delete(key)
 
 
 # --------------------------------------------------------------------------- #

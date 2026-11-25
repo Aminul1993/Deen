@@ -39,6 +39,7 @@ POST /query ──► LangGraph:  START → condense → retrieve → generate �
 - A Pinecone API key and a Groq API key
 - A Redis database (e.g. a free Redis Cloud database) for the credentials, the list of uploaded files and upload progress
 - Optionally, a [Vercel Blob](https://vercel.com/docs/vercel-blob) store for the uploaded PDFs; without one they're kept on the server's disk (see [Storing books in Vercel Blob](#storing-books-in-vercel-blob))
+- Optionally, an [OCR.space](https://ocr.space/ocrapi) API key (free), to read scanned PDFs (see [Scanned PDFs (OCR)](#scanned-pdfs-ocr))
 
 Citations are built like this:
 
@@ -216,13 +217,42 @@ The language is stored with the file and with each of its passages (`language`, 
 | File | How it's split | Metadata kept |
 |---|---|---|
 | `.txt`, `.md` | Passages of about 1,000 characters, overlapping by about 150 and ending at a paragraph, sentence or word break | `source_file`, `language` |
-| `.pdf` | The same, page by page. Scanned PDFs without a text layer are rejected. **The PDF itself is kept as a book** (see below) | `source_file`, `language`, `page` |
+| `.pdf` | The same, page by page. Pages without readable text are read with [OCR](#scanned-pdfs-ocr). **The PDF itself is kept as a book** (see below) | `source_file`, `language`, `page` |
 | `.json` (array), `.jsonl`, `.csv` | One record per item, line or row. Each needs a `text` or `content` field. Long records are split, and every part keeps the record's fields | `source_file`, `language` and every other field of the record, such as `surah`, `ayah`, `collection`, `hadith_number`, `grade`, `book` |
 
 **PDFs are kept as books.** Once a PDF's passages are stored, the file itself is kept, whether it was uploaded or downloaded from a web address, and can be read on the [books page](#books-page). Uploading a new version of it replaces the book too, and deleting the file deletes it. If the PDF can't be kept, the upload still succeeds and its passages can be cited, but the upload result says why the file isn't a book (and so does the log). Where books are kept is shown on the admin page, under the texts in the index:
 
 - **In [Vercel Blob](https://vercel.com/docs/vercel-blob)**, when `BLOB_READ_WRITE_TOKEN` is set (see [Storing books in Vercel Blob](#storing-books-in-vercel-blob)). Use this when the server's disk doesn't last across deploys, or with several servers.
 - **Otherwise on the server's disk**, in `data/books/<index>/<text>/<file id>.pdf`. Keep that folder on persistent storage and back it up, like the Redis database. With several servers, they all need the same `data/` folder (shared storage), since any of them may be asked for a book.
+
+#### Scanned PDFs (OCR)
+
+A PDF page's own text is used when it's readable. A page is read with OCR instead, in the language chosen for the upload, when its text is:
+
+- **missing**: a scanned page is only a picture;
+- **garbled**: mostly replacement (`�`), private-use or control characters, from a font the PDF doesn't map to Unicode;
+- **in an old non-Unicode font**: in a Bengali, Arabic or Urdu file, fewer than a fifth of its letters are in that script, and at least 1 in 20 of its characters are symbols such as `‡ ¨ © ø`. Fonts such as Bijoy or SutonnyMJ turn Bengali into those (`Avjøvn&i Kv‡Q` for আল্লাহর কাছে). A page in plain Latin letters, such as an English preface in a Bengali book, is kept as it is;
+- **sparse**: fewer than 40 visible characters on a page with a picture, such as a watermark over a scanned page. The page keeps its own text unless OCR finds more than twice as much.
+
+A page that's blank, or has only a little text (a title) and no picture, isn't sent. The others are drawn as 300 dpi greyscale JPEGs with PDFium (`pypdfium2`), made smaller if needed to stay under 700 KB, and sent one at a time to the [OCR.space API](https://ocr.space/OCRAPI):
+
+- **Bengali, Arabic and Urdu** files go to its **Engine 3**, which reads them almost word for word. Engine 2 turns Bengali into Devanagari and drops Arabic letters, and has no Urdu.
+- **English** files, and files without a language, go to **Engine 2**.
+
+OCR takes a few seconds a page, so a 500-page scanned book takes about half an hour; the admin page shows which page it's on and how many were read with OCR, and the upload result says how many pages were. Engine 3 is an AI model: in testing it "corrected" a spelling (রোজাদার to রোযাদার). Its Markdown headings and bold marks are removed. OCR text can have mistakes, so prefer a PDF with real text when there is one.
+
+Set `OCR_SPACE_API_KEY` in `.env` (on Vercel, in the project's environment variables) to a key from [ocr.space/ocrapi/freekey](https://ocr.space/ocrapi/freekey), and restart. The free plan allows **1,000 Engine 3 pages a month** (Bengali, Arabic, Urdu), 25,000 Engine 2 pages a month, and **500 requests a day per server IP address**, so a large Bengali book can use a month's Engine 3 pages; the PRO plan raises the limits. Every page sent leaves the server for OCR.space.
+
+If OCR.space refuses the key or a limit is reached (it answers with an error), or it fails on 3 pages in a row, the rest of the file isn't sent. Without a key, no page is sent.
+
+#### PDFs read partly
+
+Pages OCR couldn't read, for any of those reasons or because it failed on just that page, give no passages (garbled text would only be found by mistake), and the file is still added, even a scanned PDF with no page read at all. The pages are listed with the file (`pending_pages`), and:
+
+- the upload result says how many there are and why, e.g. what OCR.space answered;
+- the admin page's list of files marks the file **N pages not read yet** (hover for which), with a **Read N pages again** button.
+
+The button, or `POST /admin/api/files/{id}/ocr?namespace=…`, reads just those pages again, once the limit has reset or the key is set, from the PDF kept as a book (on disk, or downloaded from Vercel Blob). It runs in the background like a large upload, with the same progress, and pages it still can't read stay listed for next time. Their passages get the ids after the file's others (`<file id>#<n>`), so deleting the file removes them too; in a [reader](#duas-and-namaz-shikkha) they come after the file's other passages. If the PDF wasn't kept as a book, upload it again instead. A file can be uploaded, read again or deleted by one request at a time: another gets a 409 until it's finished.
 
 #### Storing books in Vercel Blob
 
@@ -243,15 +273,15 @@ Records without `text` or `content` are skipped and counted in the upload result
 
 1. The page starts a job with the file's name and size. Unsupported files, and files over 200 MB, are refused before anything is sent.
 2. It sends the parts in order, showing the percentage. A part that fails because of the network is sent again; if the server already has it, the server says how much it has and the page carries on from there.
-3. Once all parts have arrived, the server processes the file in a background thread, and the page shows how many passages are stored so far. You can close the page: the job carries on, and the file appears in the list when it's done.
+3. Once all parts have arrived, the server processes the file in a background thread, and the page shows how many passages are stored so far (and, for a PDF, which page it's on and how many were read with OCR). You can close the page: the job carries on, and the file appears in the list when it's done.
 
 Parts are kept in `data/upload-parts/` until the job ends (on Vercel, where the app's folder is read-only, in `/tmp/upload-parts/`). Job progress is kept in the database, so any worker process can take parts or report on a job. A job is processed by the process that started it; if that process stops, the job is reported as failed after 10 minutes without progress. Finished and abandoned jobs, and their parts, are removed after a day.
 
 Behind a reverse proxy, allow request bodies a little over 4 MB (for nginx, `client_max_body_size 5m;`). Mind the cost of very large files: embedding uses about one token per 3–4 characters of English, so a 200 MB file needs roughly 50–60 million tokens, far more than Pinecone's free Starter allowance of 5 million a month.
 
-**Delete files.** The page lists the files uploaded from it to the current index, with their language and, for books, a link to read them. **Delete** removes a file's vectors from Pinecone, and its book. This list is kept in the same Redis database, so that database must keep its data across restarts (turn on persistence if your host has it off). Texts indexed some other way are counted in the totals, but can't be deleted from the page.
+**Delete files.** The page lists the files uploaded from it to the current index, with their language, for books a link to read them, and for PDFs read partly, their [pages not read yet](#pdfs-read-partly). **Delete** removes a file's vectors from Pinecone, and its book. This list is kept in the same Redis database, so that database must keep its data across restarts (turn on persistence if your host has it off). Texts indexed some other way are counted in the totals, but can't be deleted from the page.
 
-The admin endpoints live under `/admin/api/` and need an `Authorization: Bearer <ADMIN_TOKEN>` header. Besides the page's job endpoints (`POST /jobs`, `PUT /jobs/{id}/data?offset=…`, `POST /jobs/{id}/finish`, `GET /jobs/{id}`), `POST /files` (a form with `namespace` and `file`) and `POST /files/from-url` (JSON with `namespace` and `url`) upload a file of up to 20 MB in a single request, for scripts. All of them take an optional `language` (a code from `LANGUAGES`, such as `bn`); the admin page always sends one. They're left out of `/docs`. Keys are never sent back to the browser; the page shows only their first and last four characters.
+The admin endpoints live under `/admin/api/` and need an `Authorization: Bearer <ADMIN_TOKEN>` header. Besides the page's job endpoints (`POST /jobs`, `PUT /jobs/{id}/data?offset=…`, `POST /jobs/{id}/finish`, `GET /jobs/{id}`), `POST /files` (a form with `namespace` and `file`) and `POST /files/from-url` (JSON with `namespace` and `url`) upload a file of up to 20 MB in a single request, for scripts. `POST /files/{id}/ocr?namespace=…` reads a PDF's [pages not read yet](#pdfs-read-partly) again, as a job. All of them take an optional `language` (a code from `LANGUAGES`, such as `bn`); the admin page always sends one. They're left out of `/docs`. Keys are never sent back to the browser; the page shows only their first and last four characters.
 
 ### Environment variables
 
@@ -263,6 +293,7 @@ The admin endpoints live under `/admin/api/` and need an `Authorization: Bearer 
 | `LOG_LEVEL` | no | `INFO` | Python log level |
 | `BLOB_READ_WRITE_TOKEN` | no | unset (books on disk) | A Vercel Blob store's read-write token: uploaded PDFs are kept there instead of `data/books/`. `VERCEL_BLOB_READ_WRITE_TOKEN` also works. See [Storing books in Vercel Blob](#storing-books-in-vercel-blob) |
 | `BLOB_ACCESS` | no | `private` | `private` or `public`: the Blob store's access mode, which must match it |
+| `OCR_SPACE_API_KEY` | no | unset (no OCR) | An [OCR.space](https://ocr.space/ocrapi) API key, for reading scanned PDF pages. See [Scanned PDFs (OCR)](#scanned-pdfs-ocr) |
 
 Credentials aren't read from the environment, except once on the first start (see [Moving from `.env`](#credentials)).
 
@@ -511,7 +542,7 @@ Sending the body as UTF-8 bytes keeps Arabic and Bengali questions intact in Win
 
 ```
 main.py            FastAPI app, LangGraph graph, prompts, Pinecone and Groq clients, books, admin API
-ingest.py          Splits uploaded files (.txt, .md, .pdf, .json, .jsonl, .csv) into passages for the admin API
+ingest.py          Splits uploaded files (.txt, .md, .pdf, .json, .jsonl, .csv) into passages for the admin API, with OCR for scanned PDF pages
 static/index.html  Chatbot web page, served at /
 static/books.html  Books page (library and page-by-page reader), served at /books
 static/i18n.js     The chat and books pages' text in English, Bengali and Arabic, and the language menu

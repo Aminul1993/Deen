@@ -152,18 +152,46 @@ def _content_disposition(filename: str) -> str:
     return f"inline; filename*=utf-8''{quoted}" if quoted != filename else f'inline; filename="{filename}"'
 
 
-def blob_response(url: str, request_headers: Mapping[str, str], filename: str,
-                  extra_headers: Optional[Dict[str, str]] = None) -> Response:
-    """Stream a book from Blob: the whole file, or the byte range the browser asked for (206).
-
-    Raises BlobMissing when Blob doesn't have it, BlobUnavailable when Blob can't be read.
-    """
+def _read_headers(url: str) -> Dict[str, str]:
+    """Headers to read a blob with: the token, for a private store."""
     host = _checked(url).hostname or ""
     headers = {"User-Agent": "Deen-books/1.0"}
     if f".private{DELIVERY_DOMAIN}" in f".{host}":
         if not token():
             raise BlobUnavailable("BLOB_READ_WRITE_TOKEN isn't set, so private books can't be read")
         headers["Authorization"] = f"Bearer {token()}"
+    return headers
+
+
+def download(url: str, sink: BinaryIO) -> None:
+    """Copy a whole book from Blob into sink, e.g. to read its pages again.
+
+    Raises BlobMissing when Blob doesn't have it, BlobUnavailable when Blob can't be read.
+    """
+    try:
+        upstream = _open(urllib.request.Request(url, headers=_read_headers(url)))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise BlobMissing(url) from None
+        raise BlobUnavailable(f"Vercel Blob answered HTTP {exc.code}") from None
+    except (urllib.error.URLError, OSError) as exc:
+        raise BlobUnavailable("Vercel Blob couldn't be reached") from exc
+    try:
+        for chunk in _chunks(upstream):
+            sink.write(chunk)
+    except OSError as exc:  # the connection dropped partway
+        raise BlobUnavailable("Vercel Blob stopped sending the book") from exc
+    finally:
+        upstream.close()
+
+
+def blob_response(url: str, request_headers: Mapping[str, str], filename: str,
+                  extra_headers: Optional[Dict[str, str]] = None) -> Response:
+    """Stream a book from Blob: the whole file, or the byte range the browser asked for (206).
+
+    Raises BlobMissing when Blob doesn't have it, BlobUnavailable when Blob can't be read.
+    """
+    headers = _read_headers(url)
     for name in FORWARDED_HEADERS:
         if request_headers.get(name):
             headers[name] = request_headers[name]

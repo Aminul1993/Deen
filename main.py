@@ -39,7 +39,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import Any, BinaryIO, Callable, Deque, Dict, Iterable, List, Literal, Mapping, Optional, Set, Tuple, TypedDict
+from typing import (Any, BinaryIO, Callable, Deque, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Set,
+                    Tuple, TypedDict)
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
@@ -113,6 +114,7 @@ MAX_LARGE_UPLOAD_BYTES = 200 * 1024 * 1024  # a file sent in parts, or downloade
 UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024  # size of each part the admin page sends; Vercel refuses bodies over 4.5 MB
 JOB_KEEP_HOURS = 24  # finished or abandoned large uploads are forgotten after this
 JOB_STALLED_MINUTES = 10  # a background upload with no progress for this long has died with its server
+FILE_LOCK_SECONDS = 15 * 60  # a file's upload, OCR retry or delete holds it this long, renewed while it goes on
 # Large uploads, until their job ends. On Vercel the app's folder is read-only and only /tmp can be written.
 PARTS_DIR = (Path(tempfile.gettempdir()) if os.getenv("VERCEL") else BASE_DIR / "data") / "upload-parts"
 EMBED_BATCH = 96  # most inputs Pinecone Inference accepts per request for multilingual-e5-large
@@ -1518,13 +1520,17 @@ class UploadedFile(BaseModel):
     language: Optional[str] = Field(None, description="Language code chosen when it was uploaded.")
     pages: Optional[int] = Field(None, description="A PDF's number of pages.")
     book: bool = Field(False, description="The PDF is kept, and can be read on the books page.")
+    pending_pages: List[int] = Field(default_factory=list, description=(
+        "A PDF's pages without readable text that OCR couldn't read yet. POST /files/{id}/ocr reads them again."))
 
 
 class UploadResult(BaseModel):
     file: UploadedFile
     skipped_records: int = Field(..., description='Records without a "text" or "content" field.')
     replaced_versions: int = Field(0, description="Earlier versions of a file with the same name that were removed.")
-    warning: Optional[str] = Field(None, description="Why a PDF couldn't be kept as a book; its passages were still stored.")
+    ocr_pages: int = Field(0, description="PDF pages without readable text, read with OCR.")
+    warning: Optional[str] = Field(None, description="PDF pages that couldn't be read, or why the PDF couldn't be kept "
+                                                     "as a book. Its passages were still stored.")
 
 
 class FilesResponse(BaseModel):
@@ -1641,8 +1647,8 @@ def admin_update_settings(update: SettingsUpdate) -> SettingsSaved:
     return SettingsSaved(settings=AdminSettings.from_values(values), changed=sorted(changes), warning=warning)
 
 
-def _vector_ids(file_id: str, count: int) -> List[str]:
-    return [f"{file_id}#{n}" for n in range(count)]
+def _vector_ids(file_id: str, count: int, first: int = 0) -> List[str]:
+    return [f"{file_id}#{n}" for n in range(first, first + count)]
 
 
 def _delete_vectors(index: Any, namespace: str, ids: List[str]) -> None:
@@ -1655,8 +1661,9 @@ def _delete_vectors(index: Any, namespace: str, ids: List[str]) -> None:
 
 def _index_passages(res: Resources, namespace: str, file_id: str, filename: str,
                     passages: Iterable[ingest.Passage], earlier_copy: bool, source_url: Optional[str] = None,
-                    on_progress: Optional[Callable[[int], None]] = None, language: Optional[str] = None) -> int:
-    """Embed passages and upsert them with ids "<file_id>#<n>", one batch at a time.
+                    on_progress: Optional[Callable[[int], None]] = None, language: Optional[str] = None,
+                    first: int = 0) -> int:
+    """Embed passages and upsert them with ids "<file_id>#<n>", n counting from first, one batch at a time.
 
     passages can be a stream (ingest.FileReader): only one batch is in memory at a time, so a
     large file needn't fit in memory. on_progress gets the number stored after each batch.
@@ -1684,7 +1691,7 @@ def _index_passages(res: Resources, namespace: str, file_id: str, filename: str,
                 check_dimension(res.settings.embedding_model, res.settings.index_name, len(vectors[0]), dimension)
             base = written
             records = [
-                {"id": f"{file_id}#{base + n}", "values": values, "metadata": {**origin, **p.metadata, "text": p.text}}
+                {"id": f"{file_id}#{first + base + n}", "values": values, "metadata": {**origin, **p.metadata, "text": p.text}}
                 for n, (p, values) in enumerate(zip(batch, vectors, strict=True))
             ]
             for offset in range(0, len(records), UPSERT_BATCH):
@@ -1696,7 +1703,7 @@ def _index_passages(res: Resources, namespace: str, file_id: str, filename: str,
     except Exception as exc:
         if written and not earlier_copy:
             try:  # don't leave half a file behind
-                _delete_vectors(res.index, namespace, _vector_ids(file_id, written))
+                _delete_vectors(res.index, namespace, _vector_ids(file_id, written, first))
             except Exception:
                 logger.exception("Could not remove the partly uploaded file %r from %r", file_id, namespace)
         if isinstance(exc, ingest.IngestError):  # found while reading the file, e.g. a bad line
@@ -1749,53 +1756,121 @@ def _too_big(limit: int) -> HTTPException:
 
 
 def _store_upload(namespace: str, filename: str, stream: BinaryIO, size: int, source_url: Optional[str] = None,
-                  on_progress: Optional[Callable[[int], None]] = None, language: Optional[str] = None) -> UploadResult:
+                  on_progress: Optional[Callable[[int], None]] = None, language: Optional[str] = None,
+                  on_page: Optional[Callable[[int, int, int], None]] = None) -> UploadResult:
     """Split a file into passages, embed them and add them to a namespace (created if it's new).
 
-    stream is read as passages are needed, so it can be a large file on disk. A PDF is also kept,
-    once its passages are stored, so it can be read on the books page.
+    stream is read as passages are needed, so it can be a large file on disk. A PDF's pages without
+    readable text are read with OCR in the file's language. A PDF is also kept, once its passages
+    are stored, so it can be read on the books page.
     """
     try:
-        reader = ingest.FileReader(filename, stream, size)
+        reader = ingest.FileReader(filename, stream, size, language=language, on_page=on_page)
     except ingest.IngestError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     res = get_resources()
     index_name = res.settings.index_name
     file_id = ingest.file_id_for(filename, stream)
-    # Earlier uploads of this file to this text: the same content (same id), or an older version with the same name.
-    earlier = [f for f in db.list_uploads(index_name)
-               if f["namespace"] == namespace and (f["file_id"] == file_id or f["filename"] == filename)]
-    stored = _index_passages(res, namespace, file_id, filename, reader, source_url=source_url, on_progress=on_progress,
-                             earlier_copy=any(f["file_id"] == file_id for f in earlier), language=language)
-    book, book_url, warning = False, None, None
-    if reader.extension == ".pdf":
-        book, book_url, problem = _keep_book(stream, index_name, namespace, file_id)
-        same_file = next((f for f in earlier if f["file_id"] == file_id and _is_book(index_name, f)), None)
-        if not book and same_file:  # this exact file is already kept: that copy still serves
-            book, book_url, problem = True, same_file.get("book_url"), None
-        warning = f"The PDF couldn't be kept as a book, so it can't be read on the books page: {problem}" if problem else None
+    with _file_locked(index_name, namespace, file_id) as renew:
+        reader.on_page = _renewing(renew, on_page)
+        # Earlier uploads of this file to this text: the same content (same id), or an older version with the same name.
+        earlier = [f for f in db.list_uploads(index_name)
+                   if f["namespace"] == namespace and (f["file_id"] == file_id or f["filename"] == filename)]
+        stored = _index_passages(res, namespace, file_id, filename, reader, source_url=source_url,
+                                 on_progress=_renewing(renew, on_progress), language=language,
+                                 earlier_copy=any(f["file_id"] == file_id for f in earlier))
+        book, book_url, warning = False, None, None
+        if reader.extension == ".pdf":
+            book, book_url, problem = _keep_book(stream, index_name, namespace, file_id)
+            same_file = next((f for f in earlier if f["file_id"] == file_id and _is_book(index_name, f)), None)
+            if not book and same_file:  # this exact file is already kept: that copy still serves
+                book, book_url, problem = True, same_file.get("book_url"), None
+            warning = _pages_warning(reader, book)
+            if problem:
+                problem = f"The PDF couldn't be kept as a book, so it can't be read on the books page: {problem}"
+                warning = f"{warning} {problem}" if warning else problem
 
-    # The new version takes the place of the earlier ones, including their position in a reader.
-    first_upload = min((f["uploaded_at"] for f in earlier), default=None)
-    row = db.save_upload(index_name, namespace, file_id, filename, stored, size, uploaded_at=first_upload,
-                         language=language, pages=reader.page_count, book=book, book_url=book_url)
-    for old in earlier:  # this same file uploaded before: its book's earlier copy, if it's elsewhere
-        if old["file_id"] == file_id and old.get("book") and old.get("book_url") != book_url:
-            _delete_book(index_name, old)
+        # The new version takes the place of the earlier ones, including their position in a reader.
+        first_upload = min((f["uploaded_at"] for f in earlier), default=None)
+        row = db.save_upload(index_name, namespace, file_id, filename, stored, size, uploaded_at=first_upload,
+                             language=language, pages=reader.page_count, book=book, book_url=book_url,
+                             pending_pages=reader.unread_pages)
+        for old in (f for f in earlier if f["file_id"] == file_id):  # this same file, uploaded before
+            if old.get("book") and old.get("book_url") != book_url:  # its book's earlier copy, if it's elsewhere
+                _delete_book(index_name, old)
+            if old["passages"] > stored:  # it had more passages, e.g. pages OCR read then and not now
+                try:
+                    _delete_vectors(res.index, namespace, _vector_ids(file_id, old["passages"] - stored, stored))
+                except Exception:  # the upload itself worked; the extra passages can still be found
+                    logger.exception("Could not delete the %d extra passages of %r", old["passages"] - stored, filename)
     replaced = 0
     for old in (f for f in earlier if f["file_id"] != file_id):
         try:
-            _delete_vectors(res.index, namespace, _vector_ids(old["file_id"], old["passages"]))
-        except Exception:
+            with _file_locked(index_name, namespace, old["file_id"]):
+                _delete_vectors(res.index, namespace, _vector_ids(old["file_id"], old["passages"]))
+                db.delete_upload(index_name, namespace, old["file_id"])
+                _delete_book(index_name, old)
+        except Exception:  # it stays in the list, so it can be deleted by hand
             logger.exception("Could not delete the earlier version %r of %r", old["file_id"], filename)
-            continue  # it stays in the list, so it can be deleted by hand
-        db.delete_upload(index_name, namespace, old["file_id"])
-        _delete_book(index_name, old)
+            continue
         replaced += 1
-    logger.info("Admin uploaded %r to %r: %d passages, replacing %d earlier version(s)", filename, namespace, stored, replaced)
+    logger.info("Admin uploaded %r to %r: %d passages (%d pages read with OCR, %d left unread), replacing %d earlier "
+                "version(s)", filename, namespace, stored, reader.ocr_pages, len(reader.unread_pages), replaced)
     return UploadResult(file=UploadedFile(**row), skipped_records=reader.skipped_records, replaced_versions=replaced,
-                        warning=warning)
+                        ocr_pages=reader.ocr_pages, warning=warning)
+
+
+def _pages_warning(reader: ingest.FileReader, book: bool) -> Optional[str]:
+    """Why some of a PDF's pages weren't read, and how to read them later, or None."""
+    if not reader.warning:
+        return None
+    if book:
+        return reader.warning + " They're marked in the list of files, where they can be read again later."
+    return reader.warning + " The PDF wasn't kept, so to read them, upload it again."
+
+
+def _lock_name(index_name: str, namespace: str, file_id: str) -> str:
+    return f"file:{index_name}/{namespace}/{file_id}"
+
+
+def _lock_file(index_name: str, namespace: str, file_id: str, owner: str) -> Callable[[], None]:
+    """Lock an uploaded file for one upload, OCR retry or delete at a time, or raise a 409.
+
+    Returns a function that renews the lock (at most once a minute), to call while the work goes on.
+    """
+    name = _lock_name(index_name, namespace, file_id)
+    if not db.lock(name, owner, FILE_LOCK_SECONDS):
+        raise HTTPException(status_code=409, detail="This file is being uploaded, read with OCR or deleted right now. "
+                                                    "Try again when that's finished.")
+    renewed = time.monotonic()
+
+    def renew() -> None:
+        nonlocal renewed
+        if time.monotonic() - renewed >= 60:
+            renewed = time.monotonic()
+            db.lock(name, owner, FILE_LOCK_SECONDS)
+
+    return renew
+
+
+@contextlib.contextmanager
+def _file_locked(index_name: str, namespace: str, file_id: str) -> Iterator[Callable[[], None]]:
+    owner = secrets.token_hex(8)
+    renew = _lock_file(index_name, namespace, file_id, owner)
+    try:
+        yield renew
+    finally:
+        db.unlock(_lock_name(index_name, namespace, file_id), owner)
+
+
+def _renewing(renew: Callable[[], None], callback: Optional[Callable[..., None]]) -> Callable[..., None]:
+    """A progress callback that also renews a file's lock."""
+    def report(*progress: Any) -> None:
+        renew()
+        if callback:
+            callback(*progress)
+    return report
 
 
 @admin_api.post("/files", response_model=UploadResult)
@@ -1961,6 +2036,9 @@ class JobStatus(BaseModel):
     size: Optional[int] = Field(None, description="Bytes in the file; unknown while a download runs.")
     received: int = Field(..., description="Bytes received or downloaded so far.")
     passages: int = Field(..., description="Passages stored so far.")
+    pages: Optional[int] = Field(None, description="A PDF's number of pages, once it's being read.")
+    pages_read: Optional[int] = Field(None, description="A PDF's pages read so far.")
+    ocr_pages: Optional[int] = Field(None, description="Of those, the pages read with OCR, which is slow.")
     chunk_bytes: int = Field(..., description="The most to send per part.")
     result: Optional[UploadResult] = None
     error: Optional[str] = None
@@ -1992,6 +2070,7 @@ def _job_status(job: Dict[str, Any]) -> JobStatus:
     return JobStatus(
         id=job["id"], state=job["state"], namespace=job["namespace"], filename=job["filename"], size=job["size"],
         received=job["received"], passages=job["passages"], chunk_bytes=UPLOAD_CHUNK_BYTES, error=job["error"],
+        pages=job["pages"], pages_read=job["pages_read"], ocr_pages=job["ocr_pages"],
         result=UploadResult.model_validate_json(job["result"]) if job["result"] else None,
     )
 
@@ -2007,23 +2086,52 @@ def _error_text(detail: Any) -> str:
     return detail.get("message", str(detail)) if isinstance(detail, dict) else str(detail)
 
 
+def _page_progress(job_id: str) -> Callable[[int, int, int], None]:
+    """Records the pages of a PDF read so far, every few seconds.
+
+    OCR can spend minutes on the pages of one batch of passages, so this also keeps the job from
+    looking stalled.
+    """
+    last = 0.0
+
+    def report(read: int, pages: int, ocr_pages: int) -> None:
+        nonlocal last
+        if read == pages or time.monotonic() - last >= 2:
+            last = time.monotonic()
+            db.update_job(job_id, pages=pages, pages_read=read, ocr_pages=ocr_pages)
+
+    return report
+
+
 def _run_job(job_id: str, url: Optional[str]) -> None:
     """Download (for a web address) and store an upload, recording progress in the database."""
     path = _part_path(job_id)
     try:
-        if url:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "wb") as sink:
-                filename = _download(url, sink, MAX_LARGE_UPLOAD_BYTES,
-                                     on_progress=lambda received: db.update_job(job_id, received=received))
-            size = path.stat().st_size
-            db.update_job(job_id, filename=filename, size=size, received=size, state="processing")
-        job = db.get_job(job_id)
-        assert job is not None
-        with open(path, "rb") as stream:
-            result = _store_upload(job["namespace"], job["filename"], stream, job["size"], source_url=job["source_url"],
-                                   on_progress=lambda stored: db.update_job(job_id, passages=stored),
-                                   language=job["language"])
+        _finish_job(job_id, partial(_process_upload, job_id, url, path))
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def _process_upload(job_id: str, url: Optional[str], path: Path) -> UploadResult:
+    if url:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as sink:
+            filename = _download(url, sink, MAX_LARGE_UPLOAD_BYTES,
+                                 on_progress=lambda received: db.update_job(job_id, received=received))
+        size = path.stat().st_size
+        db.update_job(job_id, filename=filename, size=size, received=size, state="processing")
+    job = db.get_job(job_id)
+    assert job is not None
+    with open(path, "rb") as stream:
+        return _store_upload(job["namespace"], job["filename"], stream, job["size"], source_url=job["source_url"],
+                             on_progress=lambda stored: db.update_job(job_id, passages=stored),
+                             language=job["language"], on_page=_page_progress(job_id))
+
+
+def _finish_job(job_id: str, work: Callable[[], UploadResult]) -> None:
+    """Do a background job's work, recording its result, or why it failed, in the database."""
+    try:
+        result = work()
         db.update_job(job_id, state="done", passages=result.file.passages, result=result.model_dump_json())
     except HTTPException as exc:
         db.update_job(job_id, state="failed", error=_error_text(exc.detail))
@@ -2035,8 +2143,87 @@ def _run_job(job_id: str, url: Optional[str]) -> None:
         logger.exception("Upload %s failed", job_id)
         db.update_job(job_id, state="failed", error="Something went wrong while processing the file. "
                                                     "The server's log says what; then try again.")
+
+
+# --- Reading a PDF's pages again with OCR --------------------------------------
+#
+# Pages OCR couldn't read when a PDF was uploaded (no key yet, a daily or monthly limit reached,
+# a failure) are listed in its row as pending_pages. POST /files/{id}/ocr reads just those pages
+# again from the kept book, in the background like a large upload (GET /jobs/{id} for progress).
+# Their passages get the ids after the file's others, so the file's ids stay "<file id>#0..n-1".
+
+
+@contextlib.contextmanager
+def _book_copy(index_name: str, row: Mapping[str, Any]) -> Iterator[BinaryIO]:
+    """A kept book's PDF, to read again: its file on disk, or a temporary copy from Vercel Blob."""
+    try:
+        if row.get("book_url"):
+            copy: BinaryIO = tempfile.TemporaryFile()
+            try:
+                storage.download(row["book_url"], copy)
+            except BaseException:
+                copy.close()
+                raise
+            copy.seek(0)
+        else:
+            copy = open(_book_path(index_name, row["namespace"], row["file_id"]), "rb")
+    except storage.BlobMissing as exc:
+        raise AdminRequestError("The PDF is missing from Vercel Blob. Upload it again instead.") from exc
+    except (storage.BlobUnavailable, OSError) as exc:
+        raise AdminRequestError(f"The kept PDF couldn't be read ({exc}). Try again later, or upload it again.") from exc
+    with copy:
+        yield copy
+
+
+def _read_pending_pages(job_id: str, index_name: str, namespace: str, file_id: str,
+                        renew: Callable[[], None]) -> UploadResult:
+    res = get_resources()
+    row = db.get_upload(index_name, namespace, file_id)
+    if res.settings.index_name != index_name or row is None or not row.get("pending_pages"):
+        raise AdminRequestError("The file was deleted, its pages were all read, or the index changed, so nothing was done.")
+    with _book_copy(index_name, row) as stream:
+        reader = ingest.FileReader(row["filename"], stream, row["size_bytes"], language=row.get("language"),
+                                   on_page=_renewing(renew, _page_progress(job_id)), pages=row["pending_pages"])
+        stored = _index_passages(res, namespace, file_id, row["filename"], reader, earlier_copy=False,
+                                 language=row.get("language"), first=row["passages"],
+                                 on_progress=_renewing(renew, lambda added: db.update_job(job_id, passages=added)))
+    saved = db.save_upload(index_name, namespace, file_id, row["filename"], row["passages"] + stored, row["size_bytes"],
+                           language=row.get("language"), pages=row.get("pages"), book=row["book"],
+                           book_url=row.get("book_url"), pending_pages=reader.unread_pages)
+    logger.info("Admin read %d pages of %r in %r again with OCR: %d passages added, %d pages still unread",
+                reader.ocr_pages, row["filename"], namespace, stored, len(reader.unread_pages))
+    return UploadResult(file=UploadedFile(**saved), skipped_records=0, ocr_pages=reader.ocr_pages,
+                        warning=_pages_warning(reader, book=True))
+
+
+def _run_ocr_retry(job_id: str, index_name: str, namespace: str, file_id: str, renew: Callable[[], None]) -> None:
+    try:
+        _finish_job(job_id, partial(_read_pending_pages, job_id, index_name, namespace, file_id, renew))
     finally:
-        path.unlink(missing_ok=True)
+        db.unlock(_lock_name(index_name, namespace, file_id), job_id)
+
+
+@admin_api.post("/files/{file_id}/ocr", response_model=JobStatus)
+def admin_retry_ocr(file_id: str, namespace: str = Query(...)) -> JobStatus:
+    """Read the pages of an uploaded PDF that OCR couldn't read yet, in the background (see GET /jobs/{id})."""
+    index_name = get_resources().settings.index_name
+    row = db.get_upload(index_name, namespace, file_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="That file isn't in this index's list of uploaded files.")
+    if not row.get("pending_pages"):
+        raise HTTPException(status_code=409, detail="All of this file's pages have been read already.")
+    if not _is_book(index_name, row):
+        raise HTTPException(status_code=409, detail="The PDF wasn't kept as a book, so its pages can't be read "
+                                                    "again. Upload it again instead.")
+    _forget_old_jobs()
+    job_id = secrets.token_urlsafe(16)
+    renew = _lock_file(index_name, namespace, file_id, job_id)
+    db.create_job(job_id, namespace, "processing", filename=row["filename"], size=row["size_bytes"],
+                  language=row.get("language"))
+    logger.info("Admin is reading %d pages of %r in %r again with OCR", len(row["pending_pages"]), row["filename"], namespace)
+    threading.Thread(target=_run_ocr_retry, args=(job_id, index_name, namespace, file_id, renew),
+                     name=f"ocr-{job_id}", daemon=True).start()
+    return _job_status(_job(job_id))
 
 
 def _start_job(job_id: str, url: Optional[str] = None) -> None:
@@ -2123,16 +2310,17 @@ def admin_job_status(job_id: str) -> JobStatus:
 def admin_delete_file(file_id: str, namespace: str = Query(...)) -> Dict[str, int]:
     """Delete an uploaded file's passages from Pinecone, and its PDF from the books page."""
     res = get_resources()
-    entry = db.get_upload(res.settings.index_name, namespace, file_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="That file isn't in this index's list of uploaded files.")
-    try:
-        _delete_vectors(res.index, namespace, _vector_ids(file_id, entry["passages"]))
-    except Exception as exc:
-        logger.exception("Could not delete %r from %r", file_id, namespace)
-        raise HTTPException(status_code=502, detail="Pinecone couldn't delete the file. Try again in a moment.") from exc
-    db.delete_upload(res.settings.index_name, namespace, file_id)
-    _delete_book(res.settings.index_name, entry)
+    with _file_locked(res.settings.index_name, namespace, file_id):  # not while it's being read with OCR
+        entry = db.get_upload(res.settings.index_name, namespace, file_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="That file isn't in this index's list of uploaded files.")
+        try:
+            _delete_vectors(res.index, namespace, _vector_ids(file_id, entry["passages"]))
+        except Exception as exc:
+            logger.exception("Could not delete %r from %r", file_id, namespace)
+            raise HTTPException(status_code=502, detail="Pinecone couldn't delete the file. Try again in a moment.") from exc
+        db.delete_upload(res.settings.index_name, namespace, file_id)
+        _delete_book(res.settings.index_name, entry)
     logger.info("Admin deleted %r from %r: %d passages", entry["filename"], namespace, entry["passages"])
     return {"deleted_passages": entry["passages"]}
 

@@ -293,14 +293,18 @@
 
   /* Uploaded files */
   .files { margin: 0; padding: 0; list-style: none; }
-  .file { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .file { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
   .file:first-child { border-top: 0; padding-top: 0; }
   .file:last-child { padding-bottom: 0; }
-  .file-info { flex: 1; min-width: 0; }
+  .file-info { flex: 1 1 220px; min-width: 0; } /* the buttons go below it when both don't fit */
   .file-name { display: block; font-weight: 600; overflow-wrap: anywhere; }
   .file-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-top: 2px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .badge { background: var(--badge-bg); color: var(--badge-ink); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
   .badge.plain { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-border); }
+  .file-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .file-progress { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+  .file-progress:empty { display: none; }
   .file-meta a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
   .empty-files { margin: 0; color: var(--muted); }
 
@@ -452,7 +456,7 @@
           <summary><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>How files are split and cited</summary>
           <ul>
             <li><strong>.txt, .md</strong>: split into passages of about 1,000 characters.</li>
-            <li><strong>.pdf</strong>: the text of each page, split the same way, with its page number. Scanned PDFs need OCR first. The PDF itself is kept too, from a file or a web address, so anyone can read it page by page on the public <a href="/books" target="_blank">books page</a>, and an answer's sources link to the page each passage came from. Deleting the file removes the book.</li>
+            <li><strong>.pdf</strong>: the text of each page, split the same way, with its page number. Pages without readable text (scanned, or set in an old non-Unicode font such as Bijoy) are read with OCR (OCR.space) in the language chosen above, if the server has an OCR.space key; that takes a few seconds a page. Its free plan reads 1,000 Bengali, Arabic or Urdu pages a month. Pages OCR can't read yet, e.g. once that limit is reached, are marked in the list of files below, to be read again later. The PDF itself is kept too, from a file or a web address, so anyone can read it page by page on the public <a href="/books" target="_blank">books page</a>, and an answer's sources link to the page each passage came from. Deleting the file removes the book.</li>
             <li><strong>.json, .jsonl, .csv</strong>: one record per array item, line or row. Each record needs a <code>text</code> (or <code>content</code>) field. Its other fields are kept, so answers can cite them: <code>surah</code> and <code>ayah</code> for the Quran; <code>collection</code>, <code>hadith_number</code>, <code>grade</code> and <code>book</code> for hadith.
               <pre><code>{"text": "Actions are judged by intentions…", "collection": "Sahih al-Bukhari", "hadith_number": 1, "grade": "Sahih"}</code></pre>
             </li>
@@ -728,18 +732,37 @@
         el("span", null, fileSize(file.size_bytes)),
         el("span", null, when(file.uploaded_at)),
       );
+      const pending = file.pending_pages || [];
+      if (pending.length) {
+        // A PDF read partly: these pages had no readable text, and OCR couldn't read them yet.
+        const unread = el("span", "badge warn", plural(pending.length, "page") + " not read yet");
+        unread.title = (pending.length === 1 ? "Page " : "Pages ") + pageRanges(pending) + " had no readable text, and OCR couldn't read "
+          + (pending.length === 1 ? "it" : "them") + " yet, so " + (pending.length === 1 ? "it isn't" : "they aren't") + " searchable.";
+        meta.append(unread);
+      }
       if (file.book) {
         const read = el("a", null, "Read the book" + (file.pages ? " (" + plural(file.pages, "page") + ")" : ""));
         read.href = "/books?text=" + encodeURIComponent(file.namespace) + "&book=" + encodeURIComponent(file.file_id);
         read.target = "_blank";
         meta.append(read);
       }
-      info.append(name, meta);
+      const progress = el("p", "file-progress");
+      progress.setAttribute("aria-live", "polite");
+      info.append(name, meta, progress);
+      const actions = el("div", "file-actions");
+      if (pending.length && file.book) {
+        const again = el("button", "ghost", "Read " + plural(pending.length, "page") + " again");
+        again.type = "button";
+        again.title = "Read the pages OCR couldn't read yet, e.g. once OCR.space's daily or monthly limit has reset.";
+        again.addEventListener("click", () => readAgain(file, again, progress));
+        actions.append(again);
+      }
       const remove = el("button", "danger", "Delete");
       remove.type = "button";
       remove.setAttribute("aria-label", "Delete " + file.filename + " from " + prettyName(file.namespace));
       remove.addEventListener("click", () => deleteFile(file, remove));
-      row.append(info, remove);
+      actions.append(remove);
+      row.append(info, actions);
       list.append(row);
     }
   }
@@ -765,6 +788,39 @@
     }
   }
 
+  // Page numbers as ranges: [2, 3, 4, 7] -> "2–4, 7".
+  function pageRanges(pages) {
+    const ranges = [];
+    for (const page of pages) {
+      const last = ranges[ranges.length - 1];
+      if (last && page === last[1] + 1) last[1] = page;
+      else ranges.push([page, page]);
+    }
+    return ranges.map(([first, end]) => first === end ? String(first) : first + "–" + end).join(", ");
+  }
+
+  // Read a PDF's pages that OCR couldn't read yet, in the background, showing progress in its row.
+  async function readAgain(file, button, progress) {
+    const status = $("files-status");
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = "Reading…";
+    try {
+      const path = "/files/" + encodeURIComponent(file.file_id) + "/ocr?namespace=" + encodeURIComponent(file.namespace);
+      const job = await api(path, { method: "POST" });
+      const result = await followJob(job.id, (text) => { progress.textContent = text; });
+      await loadFiles();
+      const left = result.file.pending_pages.length;
+      setStatus(status, "“" + file.filename + "”: read " + plural(result.ocr_pages, "more page") + " with OCR; it now has "
+        + plural(result.file.passages, "passage") + "." + (left ? " " + result.warning : ""), left ? "warn" : "ok");
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = label;
+      progress.textContent = "";
+      showError(status, err);
+    }
+  }
+
   async function deleteFile(file, button) {
     const question = "Delete “" + file.filename + "” from " + prettyName(file.namespace) + "?\n\n"
       + "Its " + plural(file.passages, "passage") + " will be removed from Pinecone, and answers will stop citing them.";
@@ -786,6 +842,7 @@
 
   function uploadMessage(label, result, namespace) {
     let message = label + ": added " + plural(result.file.passages, "passage") + " to " + prettyName(namespace) + ".";
+    if (result.ocr_pages) message += " " + plural(result.ocr_pages, "page") + " had no readable text and " + (result.ocr_pages === 1 ? "was" : "were") + " read with OCR.";
     if (result.file.book) message += " It can be read on the books page" + (result.file.pages ? " (" + plural(result.file.pages, "page") + ")" : "") + ".";
     if (result.replaced_versions) message += " It replaced the earlier version.";
     if (result.skipped_records) {
@@ -854,9 +911,17 @@
       }
       if (job.state === "done") return job.result;
       if (job.state === "failed") throw new Error(job.error || "The upload failed.");
-      report(job.state === "downloading"
-        ? "downloading… " + megabytes(job.received)
-        : "embedding and storing…" + (job.passages ? " " + plural(job.passages, "passage") + " so far" : ""));
+      if (job.state === "downloading") {
+        report("downloading… " + megabytes(job.received));
+      } else {
+        const progress = [];
+        if (job.pages) {
+          progress.push("page " + numberFormat.format(job.pages_read) + " of " + numberFormat.format(job.pages)
+            + (job.ocr_pages ? " (" + numberFormat.format(job.ocr_pages) + " read with OCR, which is slow)" : ""));
+        }
+        if (job.passages) progress.push(plural(job.passages, "passage") + " so far");
+        report("embedding and storing…" + (progress.length ? " " + progress.join(", ") : ""));
+      }
       await sleep(1500);
     }
   }

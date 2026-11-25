@@ -114,7 +114,7 @@ def blob_store(monkeypatch):
 
 
 def upload(client, filename="Bahishti_Zewar.pdf", content=BOOK, namespace="fiqh"):
-    return client.post("/admin/api/files", headers=AUTH, data={"namespace": namespace, "language": "bn"},
+    return client.post("/admin/api/files", headers=AUTH, data={"namespace": namespace, "language": "en"},
                        files={"file": (filename, content, "application/pdf")})
 
 
@@ -249,3 +249,32 @@ def test_blob_settings(monkeypatch):
     assert "BLOB_ACCESS" in storage.describe()
     with pytest.raises(ValueError):
         storage.access()
+
+
+def test_pages_of_a_book_in_blob_are_read_again_from_blob(client, blob_store, ocr_space):
+    from conftest import joined_pdf, scanned_pdf
+    from test_jobs import wait_for
+    install()
+    book = joined_pdf(tiny_pdf(["Patience is half of faith, and gratitude is the other half of it."]), scanned_pdf())
+    ocr_space.error = (403, b'{"error":"E301: Daily limit reached"}')
+    file = upload(client, filename="Scan.pdf", content=book).json()["file"]
+    assert file["pending_pages"] == [2] and file["book"]
+    url = db.get_upload("deen", "fiqh", file["file_id"])["book_url"]
+
+    ocr_space.error = None
+    blob_store.requests.clear()
+    job = client.post(f"/admin/api/files/{file['file_id']}/ocr", headers=AUTH, params={"namespace": "fiqh"}).json()
+    job = wait_for(client, job["id"])
+    assert job["state"] == "done", job["error"]
+    assert job["result"]["file"]["pending_pages"] == [] and job["result"]["file"]["passages"] == 2
+    [(read, headers)] = blob_store.requests  # the whole book, with the token
+    assert read == url and headers["Authorization"] == f"Bearer {TOKEN}" and "Range" not in headers
+
+    # A book Blob no longer has can't be read again.
+    ocr_space.error = (403, b'{"error":"E301: Daily limit reached"}')
+    file = upload(client, filename="Other.pdf", content=joined_pdf(book, scanned_pdf())).json()["file"]
+    blob_store.files.clear()
+    job = client.post(f"/admin/api/files/{file['file_id']}/ocr", headers=AUTH, params={"namespace": "fiqh"}).json()
+    job = wait_for(client, job["id"])
+    assert job["state"] == "failed" and "missing from Vercel Blob" in job["error"]
+    assert db.get_upload("deen", "fiqh", file["file_id"])["pending_pages"] == [2, 3]

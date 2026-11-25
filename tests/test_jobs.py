@@ -195,3 +195,13 @@ def test_records_from_a_large_upload_keep_their_citations(client, small_parts):
     assert job["state"] == "done" and job["result"]["file"]["passages"] == 300
     numbers = sorted(v["metadata"]["hadith_number"] for v in index.vectors.values())
     assert numbers == list(range(1, 301))
+
+
+def test_scanned_pdfs_are_read_with_ocr_and_report_pages(client, ocr_space):
+    from conftest import scanned_pdf
+    install()
+    job = send_file(client, "fiqh", "Scan.pdf", scanned_pdf(2), language="bn")
+    assert job["state"] == "done", job["error"]
+    assert (job["pages"], job["pages_read"], job["ocr_pages"]) == (2, 2, 2)
+    assert job["result"]["ocr_pages"] == 2 and job["result"]["warning"] is None
+    assert job["result"]["file"]["passages"] == 2 and [c[0] for c in ocr_space.calls] == [3, 3]
