@@ -35,6 +35,7 @@ import math
 import os
 import re
 import threading
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -73,6 +74,11 @@ OCR_MAX_PIXELS = 5000  # longest side of a page's image, so an oversized page ca
 OCR_MAX_BYTES = 700_000  # a page's JPEG; the free plan takes files up to 1 MB, and base64 adds a third
 OCR_TIMEOUT = 120  # seconds to wait for one page
 OCR_MAX_FAILURES = 3  # pages in a row OCR.space fails on before the rest of the file isn't sent
+# When every key has been told to slow down (E582), wait this long before each new try, then give up on
+# the rest of the file. 7 minutes in all: less than a job may go without progress before it counts as stalled.
+OCR_RATE_LIMIT_WAITS: Tuple[int, ...] = (60, 120, 240)
+_RATE_LIMITED = re.compile(r"\bE582\b|rate limit", re.IGNORECASE)  # "Please slow down": another key, or wait
+_LIMIT_REACHED = re.compile(r"maximum \d+ times", re.IGNORECASE)  # "upto maximum 500 times": the day's are used up
 # A text layer with fewer visible characters is checked with OCR too: it may be a page number or a
 # watermark over a scanned page. Its own text is kept unless OCR finds much more.
 SPARSE_PAGE_CHARS = 40
@@ -133,9 +139,9 @@ class FileReader:
 
     A PDF's pages without readable text are read with OCR, in language (an upload language code,
     see OCR_ENGINES). Pages OCR can't read (no key, a limit reached, a failure) give no passages:
-    they're listed in unread_pages, so they can be read again later with pages=unread_pages. A
-    PDF whose only text is on such pages isn't refused. on_page is called after each PDF page read
-    with (pages read, pages to read, pages read with OCR).
+    they're listed in unread_pages, so they can be read again later with pages=unread_pages, which
+    reads them in that order. A PDF whose only text is on such pages isn't refused. on_page is called
+    after each PDF page read with (pages read, pages to read, pages read with OCR).
     """
 
     def __init__(self, filename: str, stream: BinaryIO, size: int, language: Optional[str] = None,
@@ -155,11 +161,14 @@ class FileReader:
         self.stream = stream
         self.language = language
         self.on_page = on_page
-        self.only_pages = pages  # a PDF's page numbers to read (from 1), or None for all of them
+        self.only_pages = pages  # a PDF's page numbers to read (from 1), in this order, or None for all of them
         self.skipped_records = 0
         self.page_count: Optional[int] = None  # a PDF's number of pages, once reading has started
         self.ocr_pages = 0  # PDF pages whose text was read with OCR
-        self.unread_pages: List[int] = []  # numbers of PDF pages without readable text that OCR couldn't read
+        # Numbers of PDF pages without readable text that OCR couldn't read: ones it didn't get to (no key,
+        # a limit reached, the rest of the file not sent), and ones OCR.space failed on, which may fail again.
+        self._unsent_pages: List[int] = []
+        self._failed_pages: List[int] = []
         self.ocr_problem: Optional[str] = None  # why OCR stopped being used, once a page needed it
 
     def __iter__(self) -> Iterator[Passage]:
@@ -172,6 +181,15 @@ class FileReader:
         if self.skipped_records:
             raise IngestError(f'None of the {self.skipped_records} records has a "text" or "content" field to index.')
         raise IngestError("The file has no text to index.")
+
+    @property
+    def unread_pages(self) -> List[int]:
+        """Numbers of PDF pages without readable text that OCR couldn't read, in the order to try them again.
+
+        The pages OCR.space failed on come last. A page it times out on may time out every time, and a few
+        of those at the front would stop each try after OCR_MAX_FAILURES, before any other page is sent.
+        """
+        return self._unsent_pages + self._failed_pages
 
     @property
     def warning(self) -> Optional[str]:
@@ -199,8 +217,8 @@ class FileReader:
     def _pdf_passages(self) -> Iterator[Passage]:
         pages = _pdf_pages(self.stream)
         self.page_count = len(pages)
-        numbers = range(len(pages)) if self.only_pages is None else sorted(
-            {n - 1 for n in self.only_pages if 1 <= n <= len(pages)})
+        numbers = range(len(pages)) if self.only_pages is None else list(dict.fromkeys(
+            n - 1 for n in self.only_pages if 1 <= n <= len(pages)))  # in the order given, once each
         ocr = _PageReader(self.stream, self.language)
         try:
             for done, number in enumerate(numbers, start=1):
@@ -225,11 +243,11 @@ class FileReader:
             return text
         read = ocr.read(number)
         self.ocr_problem = ocr.problem or ocr.last_error
-        if read is None:  # OCR can't be used, or failed on this page
-            if not unreadable:
-                return text
-            self.unread_pages.append(number + 1)
-            return ""  # garbled text would only be found by mistake: the page waits to be read again
+        if read is None:  # OCR can't be used, or failed on this page: it waits to be read again
+            (self._failed_pages if ocr.page_failed else self._unsent_pages).append(number + 1)
+            # Its own text is garbled, or so sparse over a picture that it's likely a watermark on a scan
+            # ("www.example.org" on every page): either would only be found by mistake.
+            return ""
         # A sparse page keeps its own text (a title, say) unless OCR finds what it's printed over.
         if _visible(read) and (unreadable or _visible(read) > 2 * _visible(text)):
             self.ocr_pages += 1
@@ -365,31 +383,46 @@ def _has_images(page: Any) -> bool:
 
 
 class _OcrError(Exception):
-    """OCR.space didn't read a page. refused: it turned the request itself down (the key, or a limit)."""
+    """OCR.space didn't read a page.
 
-    def __init__(self, message: str, refused: bool = False) -> None:
+    refused: it turned the request itself down: the key isn't valid, or its limit is reached.
+    rate_limited: it asked to slow down (E582); another key may be used, or the same one a bit later.
+    """
+
+    def __init__(self, message: str, refused: bool = False, rate_limited: bool = False) -> None:
         super().__init__(message)
-        self.refused = refused
+        self.refused = refused or rate_limited
+        self.rate_limited = rate_limited
+
+
+def ocr_keys() -> List[str]:
+    """OCR.space API keys: OCR_SPACE_API_KEY holds one, or several separated by commas."""
+    return [key.strip() for key in os.getenv("OCR_SPACE_API_KEY", "").split(",") if key.strip()]
 
 
 class _PageReader:
     """Reads a PDF's pages with OCR: draws each as an image with PDFium, then sends it to OCR.space.
 
     Opens the PDF with PDFium when the first page needs it, so a PDF with a good text layer costs nothing.
+    With several keys, one is used until OCR.space refuses it (then it's dropped for this file) or asks
+    to slow down (then the next one is used, and once every key has been asked, it waits).
     """
 
     def __init__(self, stream: BinaryIO, language: Optional[str]) -> None:
         self.stream = stream
         self.engine = OCR_ENGINES.get(language or "", DEFAULT_OCR_ENGINE)
-        self.api_key = os.getenv("OCR_SPACE_API_KEY", "").strip()
-        self.problem: Optional[str] = None if self.api_key else (
+        self.keys = ocr_keys()
+        self.problem: Optional[str] = None if self.keys else (
             "OCR isn't set up on the server. Set OCR_SPACE_API_KEY (see the README).")
         self.failures = 0  # pages in a row OCR.space failed on
+        self.slowed = 0  # keys in a row told to slow down, since the last page read or wait
         self.last_error: Optional[str] = None  # what OCR.space answered when it last failed
+        self.page_failed = False  # whether the last page read failed itself, rather than OCR not being used
         self.pdf: Optional[pdfium.PdfDocument] = None
 
     def read(self, index: int) -> Optional[str]:
-        """The page's text, or None if OCR can't be used (see problem) or failed on this page."""
+        """The page's text, or None if OCR can't be used (see problem) or failed on this page (see page_failed)."""
+        self.page_failed = False
         if self.problem:
             return None
         if self.pdf is None:
@@ -404,18 +437,39 @@ class _PageReader:
             image = _jpeg(self._draw(index))
         except Exception:
             logger.warning("Could not draw page %d of a PDF for OCR", index + 1, exc_info=True)
+            self.page_failed = True
             return None
-        try:
-            text = _ocr_space(image, self.api_key, self.engine)
-        except _OcrError as exc:
-            logger.warning("OCR.space didn't read page %d of a PDF: %s", index + 1, exc)
-            self.failures += 1
-            self.last_error = f"OCR.space answered: {exc}"
-            if exc.refused or self.failures >= OCR_MAX_FAILURES:  # the rest would fail too: stop sending them
-                self.problem = self.last_error
-            return None
-        self.failures = 0
-        return text
+        waits = iter(OCR_RATE_LIMIT_WAITS)
+        while True:
+            try:
+                text = _ocr_space(image, self.keys[0], self.engine)
+            except _OcrError as exc:
+                logger.warning("OCR.space didn't read page %d of a PDF: %s", index + 1, exc)
+                self.last_error = f"OCR.space answered: {exc}"
+                if exc.rate_limited:  # this key must slow down: the next one, or a wait once all have been asked
+                    self.keys.append(self.keys.pop(0))
+                    self.slowed += 1
+                    if self.slowed < len(self.keys):
+                        continue
+                    self.slowed = 0
+                    wait = next(waits, None)
+                    if wait is not None:
+                        logger.warning("Every OCR.space key was asked to slow down; waiting %ds", wait)
+                        time.sleep(wait)
+                        continue
+                elif exc.refused:  # this key isn't valid, or its limit is reached: the next one, if any
+                    self.keys.pop(0)
+                    if self.keys:
+                        continue
+                else:  # it failed on this page, e.g. E563 "OCR Engine 3 timed out"
+                    self.failures += 1
+                    self.page_failed = True
+                    if self.failures < OCR_MAX_FAILURES:
+                        return None  # this page waits; the next is sent
+                self.problem = self.last_error  # the rest would fail too: stop sending them
+                return None
+            self.failures = self.slowed = 0
+            return text
 
     def _draw(self, index: int) -> Any:
         assert self.pdf is not None
@@ -462,13 +516,17 @@ def _ocr_space(image: bytes, api_key: str, engine: int) -> str:
         with urllib.request.urlopen(request, timeout=OCR_TIMEOUT) as response:
             answer = json.loads(response.read())
     except urllib.error.HTTPError as exc:  # e.g. 403 {"error": "E555: API key not valid", ...}
-        raise _OcrError(_ocr_error(exc.read()) or f"HTTP {exc.code}", refused=exc.code < 500) from exc
+        message = _ocr_error(exc.read()) or f"HTTP {exc.code}"
+        raise _OcrError(message, refused=exc.code < 500,
+                        rate_limited=exc.code == 429 or bool(_RATE_LIMITED.search(message))) from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:  # unreachable, timed out, not JSON
         raise _OcrError(f"it couldn't be reached ({exc})") from exc
     results = answer.get("ParsedResults") if isinstance(answer, dict) else None
     result = results[0] if results and isinstance(results[0], dict) else {}
     if str(result.get("FileParseExitCode")) != "1":
-        raise _OcrError(_ocr_error(result.get("ErrorMessage")) or _ocr_error(answer) or "it couldn't read the page")
+        message = _ocr_error(result.get("ErrorMessage")) or _ocr_error(answer) or "it couldn't read the page"
+        raise _OcrError(message, refused=bool(_LIMIT_REACHED.search(message)),
+                        rate_limited=bool(_RATE_LIMITED.search(message)))
     return _MARKDOWN.sub("", str(result.get("ParsedText") or ""))
 
 

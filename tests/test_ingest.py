@@ -148,6 +148,11 @@ def test_garbled_and_sparse_pages(ocr_space, monkeypatch):
     writer.write(out)
     ocr_space.text = ENGLISH_PAGE
     assert [p.text for p in parse_file("w.pdf", out.getvalue(), language="en").passages] == [ENGLISH_PAGE]
+    # When OCR can't read it (here, a rate limit), the watermark isn't stored: the page waits to be read again.
+    ocr_space.answer = {"ParsedResults": [], "ErrorMessage": ["E582: Rate limit exceeded"], "IsErroredOnProcessing": True}
+    reader = ingest.FileReader("w.pdf", io.BytesIO(out.getvalue()), 0, language="en")
+    assert list(reader) == [] and reader.unread_pages == [1] and "E582" in reader.warning
+    ocr_space.answer = None
 
     # A page's image is made smaller until it fits OCR.space's file size limit.
     monkeypatch.setattr(ingest, "OCR_MAX_BYTES", 15_000)
@@ -195,8 +200,62 @@ def test_ocr_space_errors(ocr_space):
     reader = ingest.FileReader("book.pdf", io.BytesIO(data), len(data), language="en")
     assert len(list(reader)) == 1
     assert len(ocr_space.calls) == 1 + ingest.OCR_MAX_FAILURES
-    assert reader.unread_pages == [2, 3, 4, 5] and "OCR.space answered: Timed out" in reader.warning
+    # The page never sent comes first, so it's tried first next time; the ones that failed come last.
+    assert reader.unread_pages == [5, 2, 3, 4] and "OCR.space answered: Timed out" in reader.warning
 
     ocr_space.answer = {"IsErroredOnProcessing": True, "ErrorMessage": ["You may only perform this action upto maximum 500 times"]}
     reader = ingest.FileReader("scan.pdf", io.BytesIO(scanned_pdf(1)), 0)
     assert list(reader) == [] and "maximum 500 times" in reader.warning
+
+
+def test_pages_ocr_keeps_failing_on_dont_hold_up_the_rest(ocr_space):
+    timed_out = (500, b'{"error":"E563: OCR Engine 3 timed out after 1 minute"}')
+    data = scanned_pdf(5)
+
+    # Pages 1 to 3 time out, so pages 4 and 5 aren't sent. They're listed first, the pages that failed last.
+    ocr_space.error = [timed_out] * 3
+    reader = ingest.FileReader("scan.pdf", io.BytesIO(data), len(data), language="ar")
+    assert list(reader) == [] and reader.unread_pages == [4, 5, 1, 2, 3] and len(ocr_space.calls) == 3
+
+    # Reading them again in that order, pages 4 and 5 are read even though 1 to 3 time out again.
+    ocr_space.error = [None, None] + [timed_out] * 3
+    reader = ingest.FileReader("scan.pdf", io.BytesIO(data), len(data), language="ar", pages=reader.unread_pages)
+    assert [p.metadata["page"] for p in reader] == [4, 5] and reader.unread_pages == [1, 2, 3]
+    assert "E563" in reader.warning
+
+    # A page read between failures starts the count again: every page is sent.
+    ocr_space.calls.clear()
+    ocr_space.error = [timed_out, None, timed_out, timed_out, None]
+    reader = ingest.FileReader("scan.pdf", io.BytesIO(data), len(data), language="ar")
+    assert [p.metadata["page"] for p in reader] == [2, 5] and reader.unread_pages == [1, 3, 4]
+    assert len(ocr_space.calls) == 5
+
+
+def test_several_keys_take_turns_when_one_is_refused_or_asked_to_slow_down(ocr_space, monkeypatch):
+    monkeypatch.setenv("OCR_SPACE_API_KEY", "test-ocr-key-1, test-ocr-key-2")
+    slept = []
+    monkeypatch.setattr(ingest.time, "sleep", slept.append)
+    slow_down = (403, b'{"error":"E582: Rate limit exceeded for this free OCR API key. Please slow down"}')
+
+    # Key 1 is asked to slow down: key 2 reads the page, and the next one.
+    ocr_space.error = [slow_down, None, None]
+    reader = ingest.FileReader("scan.pdf", io.BytesIO(scanned_pdf(2)), 0)
+    assert len(list(reader)) == 2 and reader.unread_pages == [] and slept == []
+    assert ocr_space.keys == ["test-ocr-key-1", "test-ocr-key-2", "test-ocr-key-2"]
+
+    # Both are: it waits, then tries again.
+    ocr_space.error = [slow_down, slow_down, None]
+    reader = ingest.FileReader("scan.pdf", io.BytesIO(scanned_pdf(1)), 0)
+    assert len(list(reader)) == 1 and slept == [ingest.OCR_RATE_LIMIT_WAITS[0]]
+
+    # Still after every wait: the page, and the rest of the file, wait to be read again.
+    ocr_space.error, slept[:] = slow_down, []
+    reader = ingest.FileReader("scan.pdf", io.BytesIO(scanned_pdf(2)), 0)
+    assert list(reader) == [] and reader.unread_pages == [1, 2] and "E582" in reader.warning
+    assert slept == list(ingest.OCR_RATE_LIMIT_WAITS)
+
+    # A key that isn't valid is dropped for the rest of the file.
+    ocr_space.keys.clear()
+    ocr_space.error = [(403, b'{"error":"E555: API key not valid"}'), None, None]
+    reader = ingest.FileReader("scan.pdf", io.BytesIO(scanned_pdf(2)), 0)
+    assert len(list(reader)) == 2 and ocr_space.keys == ["test-ocr-key-1", "test-ocr-key-2", "test-ocr-key-2"]

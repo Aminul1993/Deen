@@ -219,12 +219,14 @@ def ocr_space(monkeypatch):
         answer = None
         error = None
         calls = []
+        keys = []  # the API key each request was sent with
 
     fake = FakeOcrSpace()
     monkeypatch.setenv("OCR_SPACE_API_KEY", "test-ocr-key")
 
     def urlopen(request, timeout=None):
-        assert request.full_url == main.ingest.OCR_SPACE_URL and request.get_header("Apikey") == "test-ocr-key"
+        assert request.full_url == main.ingest.OCR_SPACE_URL and request.get_header("Apikey").startswith("test-ocr-key")
+        fake.keys.append(request.get_header("Apikey"))
         form = urllib.parse.parse_qs(request.data.decode())
         image = base64.b64decode(form["base64Image"][0].removeprefix("data:image/jpeg;base64,"))
         fake.calls.append((int(form["OCREngine"][0]), Image.open(io.BytesIO(image)).size, len(image)))

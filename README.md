@@ -235,7 +235,7 @@ A PDF page's own text is used when it's readable. A page is read with OCR instea
 - **missing**: a scanned page is only a picture;
 - **garbled**: mostly replacement (`�`), private-use or control characters, from a font the PDF doesn't map to Unicode;
 - **in an old non-Unicode font**: in a Bengali, Arabic or Urdu file, fewer than a fifth of its letters are in that script, and at least 1 in 20 of its characters are symbols such as `‡ ¨ © ø`. Fonts such as Bijoy or SutonnyMJ turn Bengali into those (`Avjøvn&i Kv‡Q` for আল্লাহর কাছে). A page in plain Latin letters, such as an English preface in a Bengali book, is kept as it is;
-- **sparse**: fewer than 40 visible characters on a page with a picture, such as a watermark over a scanned page. The page keeps its own text unless OCR finds more than twice as much.
+- **sparse**: fewer than 40 visible characters on a page with a picture, such as a watermark over a scanned page. The page keeps its own text unless OCR finds more than twice as much. If OCR can't read it yet, its few characters aren't stored (a watermark such as `www.example.org` on every page would only be found by mistake): it waits to be read again, like the pages below.
 
 A page that's blank, or has only a little text (a title) and no picture, isn't sent. The others are drawn as 300 dpi greyscale JPEGs with PDFium (`pypdfium2`), made smaller if needed to stay under 700 KB, and sent one at a time to the [OCR.space API](https://ocr.space/OCRAPI):
 
@@ -244,7 +244,7 @@ A page that's blank, or has only a little text (a title) and no picture, isn't s
 
 OCR takes a few seconds a page, so a 500-page scanned book takes about half an hour; the admin page shows which page it's on and how many were read with OCR, and the upload result says how many pages were. Engine 3 is an AI model: in testing it "corrected" a spelling (রোজাদার to রোযাদার). Its Markdown headings and bold marks are removed. OCR text can have mistakes, so prefer a PDF with real text when there is one.
 
-Set `OCR_SPACE_API_KEY` in `.env` (on Vercel, in the project's environment variables) to a key from [ocr.space/ocrapi/freekey](https://ocr.space/ocrapi/freekey), and restart. The free plan allows **1,000 Engine 3 pages a month** (Bengali, Arabic, Urdu), 25,000 Engine 2 pages a month, and **500 requests a day per server IP address**, so a large Bengali book can use a month's Engine 3 pages; the PRO plan raises the limits. Every page sent leaves the server for OCR.space.
+Set `OCR_SPACE_API_KEY` in `.env` (on Vercel, in the project's environment variables) to a key from [ocr.space/ocrapi/freekey](https://ocr.space/ocrapi/freekey), and restart. It can hold several keys separated by commas (`K1,K2,K3`): one is used until OCR.space refuses it (an invalid key, or its limit reached), then the next. When it asks to slow down (E582), the next key is tried, and once every key has been asked, it waits 1, 2 and then 4 minutes before giving up on the rest of the file, whose pages then wait to be read again. Check OCR.space's terms before using several free keys; the daily limit is per server IP address, whatever the key. The free plan allows **1,000 Engine 3 pages a month** (Bengali, Arabic, Urdu), 25,000 Engine 2 pages a month, and **500 requests a day per server IP address**, so a large Bengali book can use a month's Engine 3 pages; the PRO plan raises the limits. Every page sent leaves the server for OCR.space.
 
 If OCR.space refuses the key or a limit is reached (it answers with an error), or it fails on 3 pages in a row, the rest of the file isn't sent. Without a key, no page is sent.
 
@@ -255,7 +255,7 @@ Pages OCR couldn't read, for any of those reasons or because it failed on just t
 - the upload result says how many there are and why, e.g. what OCR.space answered;
 - the admin page's list of files marks the file **N pages not read yet** (hover for which), with a **Read N pages again** button.
 
-The button, or `POST /admin/api/files/{id}/ocr?namespace=…`, reads just those pages again, once the limit has reset or the key is set, from the PDF kept as a book (on disk, or downloaded from Vercel Blob). It runs in the background like a large upload, with the same progress, and pages it still can't read stay listed for next time. Their passages get the ids after the file's others (`<file id>#<n>`), so deleting the file removes them too; in a [reader](#duas-and-namaz-shikkha) they come after the file's other passages. If the PDF wasn't kept as a book, upload it again instead. A file can be uploaded, read again or deleted by one request at a time: another gets a 409 until it's finished.
+The button, or `POST /admin/api/files/{id}/ocr?namespace=…`, reads just those pages again, once the limit has reset or the key is set, from the PDF kept as a book (on disk, or downloaded from Vercel Blob). It runs in the background like a large upload, with the same progress, and pages it still can't read stay listed for next time. Pages are read again in the listed order, which puts the ones OCR.space failed on (such as E563, "OCR Engine 3 timed out") after the ones it didn't get to, so a few pages that time out every time can't stop each try after 3 failures before the others are sent. Their passages get the ids after the file's others (`<file id>#<n>`), so deleting the file removes them too; in a [reader](#duas-and-namaz-shikkha) they come after the file's other passages. If the PDF wasn't kept as a book, upload it again instead. A file can be uploaded, read again or deleted by one request at a time: another gets a 409 until it's finished.
 
 #### Storing books in Vercel Blob
 
@@ -298,7 +298,7 @@ The admin endpoints live under `/admin/api/` and need an `Authorization: Bearer 
 | `LOG_LEVEL` | no | `INFO` | Python log level |
 | `BLOB_READ_WRITE_TOKEN` | no | unset (books on disk) | A Vercel Blob store's read-write token: uploaded PDFs are kept there instead of `data/books/`. `VERCEL_BLOB_READ_WRITE_TOKEN` also works. See [Storing books in Vercel Blob](#storing-books-in-vercel-blob) |
 | `BLOB_ACCESS` | no | `private` | `private` or `public`: the Blob store's access mode, which must match it |
-| `OCR_SPACE_API_KEY` | no | unset (no OCR) | An [OCR.space](https://ocr.space/ocrapi) API key, for reading scanned PDF pages. See [Scanned PDFs (OCR)](#scanned-pdfs-ocr) |
+| `OCR_SPACE_API_KEY` | no | unset (no OCR) | An [OCR.space](https://ocr.space/ocrapi) API key, or several separated by commas, for reading scanned PDF pages. See [Scanned PDFs (OCR)](#scanned-pdfs-ocr) |
 
 Credentials aren't read from the environment, except once on the first start (see [Moving from `.env`](#credentials)).
 
